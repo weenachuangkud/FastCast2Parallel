@@ -533,6 +533,7 @@ function FastCastParallel:Init(
 			signal:Fire(...)
 		end
 	end)
+	self.Dispatcher = ParallelDispatcher
 
 	-- Queue shots and flush them once per frame (see FlushFires).
 	if not FireFlushConnection then
