@@ -8,7 +8,7 @@ sidebar_position: 2
 
 ```lua
 local caster = FastCast2.new()
-caster:Init("BulkMoveTo")
+caster:Init(4, "BulkMoveTo")
 
 caster.Hit = function(cast, result, velocity, bullet)
 	print("Hit:", result.Instance)

@@ -119,7 +119,7 @@ Caster:SpherecastFire(origin, 3, direction, SPEED, behavior)
 
 <br />
 
-How to set up [FastCastEventsModule](https://weenachuangkud.github.io/FastCast2/api/TypeDefinitions/#FastCastEventsModule)
+How to set up [FastCastEventsModule](https://weenachuangkud.github.io/FastCast2Parallel/api/TypeDefinitions/#FastCastEventsModule)
 
 ```lua
 -- Services
@@ -243,7 +243,7 @@ FastCast2:TerminateCast(cast)
 
 > **Tip**: In parallel mode, call `Caster:SyncChangesToCast(cast)` after modifying to push changes into the worker VM.
 
-### -> Get started with the [FastCast2 documentation](https://weenachuangkud.github.io/FastCast2/docs/api-reference)
+### -> Get started with the [FastCast2 documentation](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference)
 
 ---
  

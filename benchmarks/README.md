@@ -130,7 +130,7 @@ Throughput: xx.xx projectiles/s
 2. Connect an empty Studio place with the Rojo plugin.
 3. Play in Studio -- press P on the client or type p in chat on the server.
 
-The benchmark project mounts FastCast2 in `ReplicatedStorage`, the client benchmark in `ReplicatedFirst`, and the server benchmark in `ServerScriptService`. You can also insert either script manually in those locations if you do not use Rojo.
+The benchmark project mounts the FastCast2Parallel package as FastCast2 in `ReplicatedStorage`, the client benchmark in `ReplicatedFirst`, and the server benchmark in `ServerScriptService`. You can also insert either script manually in those locations if you do not use Rojo.
 
 For useful comparisons, change one setting at a time and run each configuration several times. In particular, compare all three cast types across worker counts with visualization disabled; Studio rendering, open windows, and plugins can otherwise add significant noise.
 

@@ -19,7 +19,7 @@ caster:Init(
 > 
 > Only available on FastCastEventsModule for performance reasons
 
-#### 1.2.1 Parameters
+#### 1.1.1 Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -27,13 +27,13 @@ caster:Init(
 | `movementMode` | `"BulkMoveTo" | "Motor6D"` | Movement method |
 | `fastCastEventsModule` | `ModuleScript?` | Optional FastCastEvents module |
 
-#### 1.2.2 How It Works
+#### 1.1.2 How It Works
 
 - Creates Actor-based worker VMs using VMsDispatcher
 - Each worker handles multiple casts in parallel via `ConnectParallel`
 - Fire requests are round-robined to workers for load balancing
 
-#### 1.2.3 Configuration Methods
+#### 1.1.3 Configuration Methods
 
 ```lua
 caster:SetFastCastEventsModule(moduleScript)  -- Parallel only
@@ -43,9 +43,9 @@ caster:SetMovementModeEnabled(enabled, mode)
 
 ---
 
-### 1.3 Fire Methods
+### 1.2 Fire Methods
 
-All three casters share the same fire interface:
+The parallel caster supports all three fire methods:
 
 ```lua
 caster:RaycastFire(origin, direction, velocity, BehaviorData?)
@@ -69,7 +69,7 @@ caster:SpherecastFire(Vector3.new(0, 5, 0), 3, Vector3.new(0, 0, -1), 500, behav
 
 ---
 
-### 1.4 Cast Manipulation (static methods on `FastCast`)
+### 1.3 Cast Manipulation (static methods on `FastCast`)
 
 ```lua
 -- Getters
@@ -91,7 +91,7 @@ FastCast:AddAccelerationCast(cast, acceleration) → ()
 FastCast:TerminateCast(cast) → ()
 ```
 
-In **parallel mode**, call `caster:SyncChangesToCast(cast)` after any Set/Add to push state to the worker VM.
+After modifying a cast, call `caster:SyncChangesToCast(cast)` after any Set/Add to push state to the worker VM.
 
 ```lua
 -- Example: modify a cast mid-flight
@@ -109,7 +109,7 @@ end
 
 ---
 
-### 1.5 Lifecycle
+### 1.4 Lifecycle
 
 ```lua
 caster:Destroy()  -- Cleans up all resources, actors, caches

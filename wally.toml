@@ -1,5 +1,5 @@
 [package]
-name = "weenachuangkud/fastcast2"
+name = "weenachuangkud/fastcast2parallel"
 description = "Parallel-only continuation of FastCast for Roblox with additional extensions and static typing"
 author = "Mawin Chuangkud"
 version = "0.1.4" # bumped for publish
