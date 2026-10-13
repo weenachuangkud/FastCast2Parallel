@@ -1,15 +1,14 @@
 --[[
 	FastCast2 automated benchmark matrix.
 
-	Runs a fixed set of (mode x cast type) cases on the server and returns one
-	record per case. Creation and cleanup throughput are measured with
+	Runs one case per cast type using parallel workers and returns one record
+	per case. Creation and cleanup throughput are measured with
 	os.clock, while simulation cost is reported as Heartbeat frame-time
 	percentiles.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local ServerScriptService = game:GetService("ServerScriptService")
 
 local FastCast = require(ReplicatedStorage:WaitForChild("FastCast2"))
 
@@ -26,7 +25,6 @@ Benchmarks.DefaultConfig = {
 
 local frameTimes = {}
 local isMeasuringFrames = false
-local parallelCounter = 0
 
 RunService.Heartbeat:Connect(function(deltaTime)
 	if isMeasuringFrames and deltaTime > 0 then
@@ -94,29 +92,16 @@ local function fire(caster: any, castType: string, origin: Vector3, direction: V
 	end
 end
 
-local function createCaster(mode: string, config: any, activeCasts: { any }): any
-	local caster
-
-	if mode == "Parallel" then
-		parallelCounter += 1
-		caster = FastCast.newParallel()
-		caster:Init(
-			config.parallelWorkers,
-			"BulkMoveTo"
-		)
-	else
-		caster = FastCast.new()
-		caster:Init("BulkMoveTo")
-	end
-
+local function createCaster(config: any, activeCasts: { any }): any
+	local caster = FastCast.new()
+	caster:Init(config.parallelWorkers, "BulkMoveTo")
 	caster.CastFire = function(cast: any)
 		table.insert(activeCasts, cast)
 	end
-
 	return caster
 end
 
-local function runCase(mode: string, castType: string, caster: any, activeCasts: { any }, config: any)
+local function runCase(castType: string, caster: any, activeCasts: { any }, config: any)
 	local random = Random.new(config.randomSeed)
 	local creationStarted = os.clock()
 
@@ -146,7 +131,6 @@ local function runCase(mode: string, castType: string, caster: any, activeCasts:
 	local cleanupSeconds = os.clock() - cleanupStarted
 
 	local result = {
-		mode = mode,
 		castType = castType,
 		projectiles = config.projectileCount,
 		activeCasts = activeCount,
@@ -162,8 +146,7 @@ local function runCase(mode: string, castType: string, caster: any, activeCasts:
 	}
 
 	print(string.format(
-		"[bench] %s/%s: create %.2f ms, avg %.2f ms, p95 %.2f ms, p99 %.2f ms, cleanup %.2f ms",
-		mode,
+		"[bench] Parallel/%s: create %.2f ms, avg %.2f ms, p95 %.2f ms, p99 %.2f ms, cleanup %.2f ms",
 		castType,
 		result.creationMs,
 		result.averageFrameMs,
@@ -196,17 +179,15 @@ function Benchmarks.run(overrides: any?): { any }
 
 	local results = {}
 
-	for _, mode in { "Serial", "Parallel" } do
-		local activeCasts = {}
-		local caster = createCaster(mode, config, activeCasts)
 
-		for _, castType in config.castTypes do
-			table.insert(results, runCase(mode, castType, caster, activeCasts, config))
-		end
+local activeCasts = {}
+	local caster = createCaster(config, activeCasts)
 
-		caster:Destroy()
-		task.wait(1)
+	for _, castType in config.castTypes do
+		table.insert(results, runCase(castType, caster, activeCasts, config))
 	end
+
+	caster:Destroy()
 
 	return results
 end
