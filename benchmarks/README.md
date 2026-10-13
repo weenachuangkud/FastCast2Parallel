@@ -1,12 +1,12 @@
 # Benchmarks
 
-Interactive benchmarking tools for FastCast2. Two scripts for comparing performance across serial and parallel modes with real-time parameter tuning.
+Interactive benchmarking tools for FastCast2Parallel with real-time parameter tuning.
 
 ## BenchmarkClient -- Client-side benchmark
 
 **Type**: LocalScript (runs in StarterPlayerScripts or ReplicatedFirst)
 
-Fires projectiles and tracks FPS using keyboard controls. Supports both serial and parallel casting modes.
+Fires projectiles and tracks FPS using keyboard controls. Measures parallel casting only.
 
 ### Controls
 
@@ -22,7 +22,6 @@ Fires projectiles and tracks FPS using keyboard controls. Supports both serial a
 | X | Cycle HighFidelityBehavior (Default > Automatic > Always) |
 | > | Increase HighFidelitySegmentSize by 0.05 |
 | < | Decrease HighFidelitySegmentSize by 0.05 (floor 0.05) |
-| B | Switch serial / parallel caster |
 | [ | Decrement numWorkers (floor 2, parallel only) |
 | ] | Increment numWorkers (parallel only) |
 | I | Show benchmark info |
@@ -36,7 +35,6 @@ Edit at the top of the file:
 
 ```lua
 local Config = {
-    Parallel = true,          -- true = parallel, false = serial
     NumWorkers = 4,           -- number of VM workers (parallel only)
     ProjectileAmount = 500,   -- projectiles per benchmark run
     CastType = "Raycast",     -- Raycast, Blockcast, or Spherecast
@@ -124,7 +122,7 @@ Throughput: xx.xx projectiles/s
 - **Elapsed / throughput** measure synchronous projectile creation and cleanup work.
 - **Average frame time** is calculated from every heartbeat during the simulation window; FPS is derived from that average.
 - **P50 / P95 / P99** expose frame-time spikes that an FPS average can hide (lower is better).
-- Each run uses the same random seed, so different modes and settings receive identical projectile origins and directions.
+- Each run uses the same random seed, so different settings receive identical projectile origins and directions.
 
 ## Quick Start
 
@@ -138,7 +136,7 @@ For useful comparisons, change one setting at a time and run each configuration 
 
 ## Automated suite
 
-The repeatable six-case matrix (Serial/Parallel x Raycast/Blockcast/Spherecast)
+The repeatable three-case matrix (Parallel x Raycast/Blockcast/Spherecast)
 now lives with the rest of the automated tests. It builds a Rojo place, runs it
 in Studio with `run-in-roblox`, prints a Markdown results table, and uploads the
 report to [paste.shellworks.dev](https://paste.shellworks.dev). See

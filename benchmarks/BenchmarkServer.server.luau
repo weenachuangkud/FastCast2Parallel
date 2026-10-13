@@ -170,7 +170,7 @@ end
 --// Caster Creation
 
 local function createCaster()
-	local caster = FastCast.newParallel()
+	local caster = FastCast.new()
 
 	caster:Init(
 		Config.NumWorkers,
