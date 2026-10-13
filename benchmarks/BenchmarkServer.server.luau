@@ -233,10 +233,6 @@ local function printBenchmarkInfo()
 
 	print(("CastType: %s"):format(Config.CastType))
 
-	print(("ObjectCache: %s"):format(
-		getObjectCacheState() and "Enabled" or "Disabled"
-		))
-
 	print(("VisualizeCasts: %s"):format(
 		CastBehavior.VisualizeCasts and "Enabled" or "Disabled"
 		))
