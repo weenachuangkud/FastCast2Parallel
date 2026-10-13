@@ -180,7 +180,7 @@ Register it on your parallel caster after `Init`:
 Caster:SetFastCastEventsModule(pathTo.FastCastEventsModule)
 ```
 
-> **Note**: `SetFastCastEventsModule` is only available on parallel casters. In serial mode, set event handlers directly on the caster (e.g., `Caster.Hit = function(...)`).
+
 
 ### Motor6D movement mode
 
