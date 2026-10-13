@@ -1,11 +1,11 @@
 [package]
-name = "weenachuangkud/fastcast2"
-description = "An improved version of FastCast with Parallel scripting, more extensions, and statically typed"
+name = "weenachuangkud/fastcast2parallel"
+description = "Parallel-only continuation of FastCast for Roblox with additional extensions and static typing"
 author = "Mawin Chuangkud"
 version = "0.1.4" # bumped for publish
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 exclude = ["**"]
-include = ["src", "src/**", "wally.toml", "wally.lock", "default.project.json", "LICENSE", "README.md"]
+include = ["src", "src/**", "wally.toml", "wally.lock", "default.project.json", "LICENSE-ART", "LICENSE-MIT", "README.md"]
 
 [dependencies]

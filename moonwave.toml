@@ -1,5 +1,5 @@
-title = "FastCast2"  # From Git
-gitRepoUrl = "https://github.com/weenachuangkud/FastCast2" # From Git
+title = "FastCast2Parallel"  # From Git
+gitRepoUrl = "https://github.com/weenachuangkud/FastCast2Parallel" # From Git
 
 gitSourceBranch = "main"
 changelog = true
@@ -11,9 +11,9 @@ onBrokenMarkdownLinks = "warn"
 
 # From git:
 organizationName = "weenachuangkud"
-projectName = "FastCast2"
+projectName = "FastCast2Parallel"
 url = "https://weenachuangkud.github.io"
-baseUrl = "/FastCast2"
+baseUrl = "/FastCast2Parallel"
 tagline = "Your project's tagline"
 
 

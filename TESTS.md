@@ -1,25 +1,34 @@
-### Caster
-1. Initialization
-2. Basic raycast/blockcast/spherecast firing
-3. All [events](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#112-events) should be able to works
-4. ObjectCache
-5. MovementMode
-6. Cast Manipulation
-7. Repeat the same tests above for parallel version
-8. SetFastCastEventsModule (Parallel)
-9. SyncChangesToCast (Parallel)
-### FastCastBehavior
-- https://weenachuangkud.github.io/FastCast2/docs/api-reference/#2-fastcastbehavior
-### ActiveCastData
-- https://weenachuangkud.github.io/FastCast2/docs/api-reference/#3-activecastdata
-### [FastCastEventsModule](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#4-fastcasteventsmodule) (Parallel)
-- All [events](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#112-events) should be able to works
-- [FastCastEventsModuleConfig](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#event-configuration)
-### [High-Fidelity Behavior](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#5-high-fidelity-behavior)
-- Modes (Default, Automatic, Always)
-- HighFidelitySegmentSize
+# Testing FastCast2Parallel
 
-### NOTE
+Run the automated suite from the repository root:
 
-- You do not need to check whether the arguments are correct, handle edge cases, etc., as these are already handled (and should be handled) inside the code.
-- If you pass all the tests without any errors, and the results aren't off, it should pretty much be working fine.
+```sh
+npm test
+# or
+lune run tests/run.luau
+```
+
+The runner builds a Rojo place, runs it in Roblox Studio through `run-in-roblox`,
+prints a functional-test summary and a three-case parallel benchmark table, and
+uploads the report to [paste.shellworks.dev](https://paste.shellworks.dev).
+See [`tests/README.md`](tests/README.md) for prerequisites and options.
+
+## Functional coverage
+
+- Caster initialization and cleanup
+- Raycast, Blockcast, and Spherecast hit/termination behavior
+- Public event callbacks and multiple Signal listeners
+- FastCastEventsModule forwarding
+- Runtime cast manipulation and `SyncChangesToCast`
+- Movement mode changes and high-fidelity behavior
+
+## Benchmarks
+
+The automated benchmark runs the parallel implementation with Raycast, Blockcast,
+and Spherecast. It records creation and cleanup throughput plus simulation frame
+time percentiles. Worker count and sample duration are configurable in
+`tests/src/Benchmarks.luau`.
+
+The same behaviors can be checked manually in Studio if automated execution is
+not available. See the [API reference](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference/).
+
