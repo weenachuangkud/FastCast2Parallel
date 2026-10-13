@@ -70,7 +70,7 @@ FastCast2 is an open-source project, and contributions from the community are we
 2. Run `wally init` if you haven't already.
 3. Add FastCast2 under `[dependencies]` in your `wally.toml`:
 ```toml
-   FastCast2 = "weenachuangkud/fastcast2@0.1.4"
+   FastCast2 = "weenachuangkud/fastcast2parallel@0.1.4"
 ```
  
 4. Run `wally install` and you're ready to use it.
