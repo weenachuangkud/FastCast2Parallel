@@ -24,7 +24,6 @@
 --// Services
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 

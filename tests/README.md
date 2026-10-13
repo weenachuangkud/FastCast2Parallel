@@ -43,7 +43,7 @@ see [the hot-path runner](hotpaths/README.md) (`npm run test:hotpaths`).
 
 - **Functional tests** (`tests/src/FunctionalTests.luau`) follow the checklist
   in [`TESTS.md`](../TESTS.md): initialization, raycast/blockcast/spherecast
-  firing, every public event, movement modes, cast manipulation, high-fidelity behavior,
+  firing, event callbacks and Signal listeners, movement modes, cast manipulation, high-fidelity behavior,
   and the parallel-only extensions
   (`SetFastCastEventsModule`, `SyncChangesToCast`).
 - **Benchmarks** (`tests/src/Benchmarks.luau`) run a fixed three-case matrix of

@@ -72,10 +72,7 @@ behavior.Acceleration = Vector3.zero
 behavior.AutoIgnoreContainer = true
 behavior.HighFidelitySegmentSize = 1
 
-local caseIndex = 0
-
 local function runCase(projectileCount: number, instanced: boolean, movement: boolean)
-	caseIndex += 1
 	local castMode = "Parallel"
 
 	behavior.CosmeticBulletTemplate = if instanced then cosmeticTemplate else nil

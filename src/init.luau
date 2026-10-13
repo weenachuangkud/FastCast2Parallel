@@ -492,7 +492,7 @@ end
 	
 	@param numWorkers number -- Number of workers for parallel luau
 	@param movementMode "BulkMoveTo" | "Motor6D" -- MovementMode for projectiles
-	@param FastCastEventsModule ModuleScript -- The ModuleScript containing the FastCastEvents, A table of callback functions (events/hooks) used by ActiveCast..
+	@param FastCastEventsModule ModuleScript? -- Optional ModuleScript containing the FastCastEvents, A table of callback functions (events/hooks) used by ActiveCast..
 ]=]
 function FastCastParallel:Init(
 	numWorkers: number,
