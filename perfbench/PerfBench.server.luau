@@ -18,9 +18,7 @@ local FastCastConfig = require(ReplicatedStorage.FastCast2:WaitForChild("Config"
 
 local SENTINEL = "PERFBENCH_RESULT"
 local SAMPLE_SECONDS = 5
-local WORKERS = 4
 local COUNTS = { 6000 }
-local CAST_MODES = { "Parallel", "Serial" }
 local INSTANCED = { true }
 local MOVEMENT = { true, false }
 
@@ -76,23 +74,15 @@ behavior.HighFidelitySegmentSize = 1
 
 local caseIndex = 0
 
-local function runCase(castMode: string, projectileCount: number, instanced: boolean, movement: boolean)
+local function runCase(projectileCount: number, instanced: boolean, movement: boolean)
 	caseIndex += 1
+	local castMode = "Parallel"
 
 	behavior.CosmeticBulletTemplate = if instanced then cosmeticTemplate else nil
 	behavior.CosmeticBulletContainer = if instanced then cosmeticContainer else nil
 
-	local caster
-	if castMode == "Parallel" then
-		caster = FastCast.newParallel()
-		caster:Init(
-			WORKERS,
-			"BulkMoveTo"
-		)
-	else
-		caster = FastCast.new()
-		caster:Init("BulkMoveTo")
-	end
+	local caster = FastCast.new()
+	caster:Init(4, "BulkMoveTo")
 
 	caster:SetMovementModeEnabled(movement, "BulkMoveTo")
 
@@ -153,23 +143,20 @@ task.spawn(function()
 	task.wait(2)
 	print(string.format("[perfbench] mode=%s", FastCastConfig.SimulationMode))
 
-	for _, castMode in CAST_MODES do
-		for _, projectileCount in COUNTS do
-			for _, instanced in INSTANCED do
-				for _, movement in MOVEMENT do
-					local ok, err = pcall(runCase, castMode, projectileCount, instanced, movement)
-					if not ok then
-						print(string.format(
-							"%s %s|%s|%d|instanced=%s|movement=%s|ERROR|%s",
-							SENTINEL,
-							FastCastConfig.SimulationMode,
-							castMode,
-							projectileCount,
-							tostring(instanced),
-							tostring(movement),
-							tostring(err)
-						))
-					end
+	for _, projectileCount in COUNTS do
+		for _, instanced in INSTANCED do
+			for _, movement in MOVEMENT do
+				local ok, err = pcall(runCase, projectileCount, instanced, movement)
+				if not ok then
+					print(string.format(
+						"%s %s|Parallel|%d|instanced=%s|movement=%s|ERROR|%s",
+						SENTINEL,
+						FastCastConfig.SimulationMode,
+						projectileCount,
+						tostring(instanced),
+						tostring(movement),
+						tostring(err)
+					))
 				end
 			end
 		end
