@@ -44,7 +44,7 @@ Because FastCast is no longer actively maintained by [EtiTheSpirit](https://gith
 
 - Highly customizable
 - Versatile projectile library
-- Parallel scripting support
+- Parallel projectile simulation across worker VMs
 - Easy to use and integrate
 - Raycast and Blockcast, Spherecast support
 - BulkMoveTo/Motor6D support
@@ -84,93 +84,15 @@ FastCast2 is an open-source project, and contributions from the community are we
 
 ## Quick start
  
-Shooting projectiles from your head (Serial mode, simpler, runs on the main thread):
- 
-```lua
--- Services
-local Rep = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
- 
--- Requires
-local FastCast2 = require(Rep:WaitForChild("FastCast2"))
-local FastCastEnums = require(Rep:WaitForChild("FastCast2"):WaitForChild("FastCastEnums"))
- 
--- CONSTANTS
-local SPEED = 500
- 
--- Variables
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local Head = character:WaitForChild("Head")
-local Mouse = player:GetMouse()
- 
-local ProjectileContainer = workspace:WaitForChild("Projectiles")
-local ProjectileTemplate = Rep:WaitForChild("Projectile")
- 
--- CastParams
-local CastParams = RaycastParams.new()
-CastParams.FilterDescendantsInstances = {character}
-CastParams.FilterType = Enum.RaycastFilterType.Exclude
-CastParams.IgnoreWater = true
- 
--- Behavior (FastCastBehavior)
-local behavior = FastCast2.newBehavior()
-behavior.MaxDistance = 1000
-behavior.RaycastParams = CastParams
-behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Default
-behavior.HighFidelitySegmentSize = 1
-behavior.Acceleration = Vector3.new(0, -workspace.Gravity/2.3, 0)
-behavior.CosmeticBulletContainer = ProjectileContainer
-behavior.CosmeticBulletTemplate = ProjectileTemplate
- 
--- Serial Caster (runs on main thread, simpler)
-local Caster = FastCast2.new()
-Caster:Init("BulkMoveTo") -- movementMode
- 
--- Events (can be set before Init)
-Caster.Hit = function(cast, result, velocity, bullet)
-	print("Hit: " .. result.Instance.Name)
-end
- 
--- Fire
-local function fire()
-	local origin = Head.Position
-	local direction = (Mouse.Hit.Position - origin).Unit
-	Caster:RaycastFire(origin, direction, SPEED, behavior)
-end
- 
--- Input
-game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		fire()
-	end
-end)
-```
-
-### Blockcast & Spherecast
- 
-Swap `RaycastFire` for `BlockcastFire` or `SpherecastFire` to change the cast type:
- 
-```lua
--- Blockcast: pass a Vector3 size after origin
-Caster:BlockcastFire(origin, Vector3.new(2, 4, 2), direction, SPEED, behavior)
- 
--- Spherecast: pass a number radius after origin
-Caster:SpherecastFire(origin, 3, direction, SPEED, behavior)
-```
-
-### Cosmetic bullets
-
 FastCast2 no longer includes a built-in ObjectCache. Manage cosmetic bullet instances yourself through `behavior.CosmeticBulletTemplate` and `behavior.CosmeticBulletContainer`.
 
 FastCast2 does not automatically destroy or return cosmetic bullet instances when a cast terminates. Your game controls their lifecycle.
 
-### Parallel mode
+### Parallel simulation
 
  
 ```lua
-local Caster = FastCast2.newParallel()
+local Caster = FastCast2.new()
 Caster:Init(
 	4,                 -- numWorkers
 	"BulkMoveTo",      -- movementMode

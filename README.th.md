@@ -124,7 +124,7 @@ behavior.CosmeticBulletContainer = ProjectileContainer
 behavior.CosmeticBulletTemplate = ProjectileTemplate
 
 
--- Serial Caster (รันบน main thread ใช้งานง่ายกว่า)
+-- Parallel Caster (จำลอง projectile บน worker VMs)
 local Caster = FastCast2.new()
 Caster:Init("BulkMoveTo") -- movementMode
 
@@ -171,7 +171,7 @@ FastCast2 จะไม่ลบหรือคืน cosmetic bullet ให้�
  (ประสิทธิภาพสูงด้วยหลาย VM)
 
 ```lua
-local Caster = FastCast2.newParallel()
+local Caster = FastCast2.new()
 Caster:Init(
 	4,                 -- numWorkers
 	workspace,         -- VM folder parent

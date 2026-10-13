@@ -71,8 +71,6 @@ local RunService = game:GetService("RunService")
 local Signal = require(script:WaitForChild("Signal"))
 local TypeDef = require(script:WaitForChild("TypeDefinitions"))
 local DefaultConfigs = require(script:WaitForChild("DefaultConfigs"))
-local BaseCastSerial = require(script:WaitForChild("BaseCastSerial"))
-local SerialSimulation = require(script:WaitForChild("SerialSimulation"))
 local DispatcherModule = script:WaitForChild("FastCastVMs")
 local Dispatcher = require(DispatcherModule)
 
@@ -91,7 +89,6 @@ export type OnCastFireFunction = TypeDef.OnCastFireFunction
 export type VisualizeCastSettings = TypeDef.VisualizeCastSettings
 
 export type CasterParallel = TypeDef.CasterParallel
-export type CasterSerial = TypeDef.CasterSerial
 
 export type FastCastEventsModuleConfig = TypeDef.FastCastEventsModuleConfig
 export type FastCastEventsConfig = TypeDef.FastCastEventsConfig
@@ -282,7 +279,7 @@ end
 	@class FastCast
 
 	FastCast provides static utility methods for manipulating active casts (velocity, position, acceleration)
-	and serves as the module root for constructing new Serial and Parallel casters.
+	and serves as the module root for constructing parallel casters.
 ]=]
 
 local FastCast = {}
@@ -297,12 +294,6 @@ FastCast.CastType = {
 	Spherecast = 3
 }
 --[=[
-	@class FastCastSerial
-
-	FastCastSerial is the serial caster class that runs all cast simulations on the main thread.
-]=]
-local FastCastSerial = {}
---[=[
 	@class FastCastParallel
 
 	FastCastParallel is the parallel caster class that runs cast simulations on separate worker VMs.
@@ -313,10 +304,6 @@ local FastCastParallel = {}
 If true, verbose debug logging will be used, 
 	printing detailed information about what's going on during processing to the output.
 ]]
-
-FastCastSerial.__index = IndexCaster
-FastCastSerial.__newindex = NewIndexCaster
-FastCastSerial.__type = "FastCastSerial"
 
 FastCastParallel.__index = IndexCaster
 FastCastParallel.__newindex = NewIndexCaster
@@ -397,7 +384,30 @@ end
 --[=[
 	Creates a new FastCastBehavior, which contains information necessary to Fire the cast properly.
 	
-	@return FastCastBehavior
+	@--[=[
+	Creates a new Parallel Caster. Cast simulations run on separate worker VMs.
+
+	:::warning
+	Initialize the caster before firing projectiles.
+	:::
+
+	@function new
+	@within FastCast
+	@return CasterParallel
+]=]
+function FastCast.new()
+	local caster = {
+		_events = NewCasterSignals(),
+		WorldRoot = workspace,
+		Dispatcher = nil,
+		AlreadyInit = false
+	}
+	setmetatable(caster, FastCastParallel)
+	return caster
+end
+
+return FastCast
+Behavior
 ]=]
 function FastCast.newBehavior(): TypeDef.FastCastBehavior
 	return deepCopyTable(DefaultConfigs.FastCastBehavior) :: TypeDef.FastCastBehavior
@@ -674,141 +684,6 @@ function FastCastParallel:SetMovementModeEnabled(enabled: boolean, mode: "BulkMo
 	self.MovementMode = mode
 end
 
--- Serial Caster Methods
-
---[=[
-	Initialize the Serial Caster.
-	@method Init
-	@within FastCastSerial
-
-	@param movementMode: "BulkMoveTo" | "Motor6D" -- Whether to use BulkMoveTo or Motor6D Transform for projectile movement.
-]=]
-function FastCastSerial:Init(
-	movementMode: "BulkMoveTo" | "Motor6D"
-)
-	if self.BaseCast then
-		warn("Serial Caster already initialized")
-		return
-	end
-
-	local data = {
-		movementMode = movementMode or "BulkMoveTo"
-	}
-
-	local events: TypeDef.FastCastSignalEvents = {
-		CastFire = self.CastFire,
-		Pierced = self.Pierced,
-		Hit = self.Hit,
-		LengthChanged = self.LengthChanged,
-		CanPierce = self.CanPierce,
-		CastTerminating = self.CastTerminating
-	}
-
-	BaseCastSerial.Init(events, data)
-	self.BaseCast = BaseCastSerial
-
-	self.MovementMode = movementMode or "BulkMoveTo"
-	self.AlreadyInit = true
-end
-
---[=[
-	@method RaycastFire
-	@within FastCastSerial
-]=]
-function FastCastSerial:RaycastFire(
-	origin: Vector3,
-	direction: Vector3,
-	velocity: Vector3 | number,
-	BehaviorData: TypeDef.FastCastBehavior
-)
-	if not self.AlreadyInit then
-		error("Please Init caster first")
-	end
-	if BehaviorData == nil then
-		BehaviorData = FastCast.newBehavior()
-	end
-
-	BaseCastSerial.Raycast(origin, direction, velocity, BehaviorData)
-end
-
---[=[
-	@method BlockcastFire
-	@within FastCastSerial
-]=]
-function FastCastSerial:BlockcastFire(
-	origin: Vector3,
-	Size: Vector3,
-	direction: Vector3,
-	velocity: Vector3 | number,
-	BehaviorData: TypeDef.FastCastBehavior
-)
-	if not self.AlreadyInit then
-		error("Please Init caster first")
-	end
-	if BehaviorData == nil then
-		BehaviorData = FastCast.newBehavior()
-	end
-
-	BaseCastSerial.Blockcast(origin, Size, direction, velocity, BehaviorData)
-end
-
---[=[
-	@method SpherecastFire
-	@within FastCastSerial
-]=]
-function FastCastSerial:SpherecastFire(
-	origin: Vector3,
-	Radius: number,
-	direction: Vector3,
-	velocity: Vector3 | number,
-	BehaviorData: TypeDef.FastCastBehavior
-)
-	if not self.AlreadyInit then
-		error("Please Init caster first")
-	end
-	if BehaviorData == nil then
-		BehaviorData = FastCast.newBehavior()
-	end
-
-	BaseCastSerial.Spherecast(origin, Radius, direction, velocity, BehaviorData)
-end
-
---[[
-	@method SetMovementModeEnabled
-	@param enabled boolean -- Is enabled
-	@param mode "BulkMoveTo" | "Motor6D" -- MovementMode
-
-	@within FastCastSerial
-	Sets movement mode for the Serial Caster.
-]]
-function FastCastSerial:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
-	if not self.BaseCast then return end
-
-	BaseCastSerial.SetMovementModeEnabled(enabled, mode)
-	self.MovementMode = mode
-end
-
---[=[
-	@method Destroy
-	@within FastCastSerial
-]=]
-function FastCastSerial:Destroy()
-	if getmetatable(self) ~= FastCastSerial then
-		return
-	end
-
-	BaseCastSerial.Destroy()
-	DestroyCasterSignals(self)
-	setmetatable(self, nil)
-
-	self.Destroy = function() end
-end
-
---[=[
-	Destroy's a Caster, cleaning up all resources used by it.
-	@method Destroy
-	@within FastCastParallel
-]=]
 function FastCastParallel:Destroy()
 	if getmetatable(self) ~= FastCastParallel then
 		return
@@ -997,74 +872,21 @@ function FastCast:TerminateCast(cast: vaildcast)
 		return
 	end
 
-	if cast.Mode == "Serial" then
-		cast._Destroying = true
-		cast._TerminationQueued = true
-
-		SerialSimulation.QueueEvent(
-			cast.ID,
-			"CastTerminating"
-		)
-
-	elseif cast.Mode == "Parallel" then
-		local caster = cast.Caster
-		if caster == nil then
-			return
-		end
-
-		cast._Destroying = true
-
-		local eventsCfg = cast.StateInfo and cast.StateInfo.FastCastEventsConfig
-		if eventsCfg and eventsCfg.UseCastTerminating then
-			caster.Output:Fire("CastTerminating", cast)
-		end
-
-		caster.Actor:SendMessage("Cleanup", cast.ID)
+	local caster = cast.Caster
+	if caster == nil then
+		return
 	end
+
+	cast._Destroying = true
+
+	local eventsCfg = cast.StateInfo and cast.StateInfo.FastCastEventsConfig
+	if eventsCfg and eventsCfg.UseCastTerminating then
+		caster.Output:Fire("CastTerminating", cast)
+	end
+
+	caster.Actor:SendMessage("Cleanup", cast.ID)
 end
 
 -- Constructors
-
---[=[
-	Creates a new Serial Caster. A Serial Caster runs all cast simulations on the main thread
-	and is simpler to use but less performant than [FastCast.newParallel](FastCast#newParallel).
-
-	@function new
-	@within FastCast
-
-	@return Caster
-]=]
-function FastCast.new()
-	local fs = {
-		_events = NewCasterSignals(),
-		WorldRoot = workspace,
-	}
-	setmetatable(fs, FastCastSerial)
-	return fs
-end
-
---[=[
-	Creates a new Parallel Caster. A Parallel Caster runs cast simulations on separate worker VMs
-
-	:::warning
-	You must [initialize](FastCastParallel#Init) the Parallel Caster before using it!
-	Failing to do so will result in nothing happening when attempting to fire!
-	:::
-
-	@function newParallel
-	@within FastCast
-
-	@return Caster
-]=]
-function FastCast.newParallel()
-	local fp = {
-		_events = NewCasterSignals(),
-		WorldRoot = workspace,
-		Dispatcher = nil,
-		AlreadyInit = false
-	}
-	setmetatable(fp, FastCastParallel)
-	return fp
-end
 
 return FastCast

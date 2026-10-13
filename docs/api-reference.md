@@ -2,61 +2,12 @@
 
 ## 1. Caster
 
-### 1.1 Serial Mode (`FastCast.new()`)
-
-Serial Caster runs all cast simulations on the main thread. Simpler.
-
-```lua
-local caster = FastCast2.new()
-caster:Init(movementMode)
-```
-
-#### 1.1.1 Events
-
-Caster events are lightweight `Signal` objects (not `BindableEvent`s), so any
-number of listeners can connect and disconnect independently. Events can be
-connected **before or after Init**:
-
-```lua
-local connection = caster.Hit:Connect(function(cast, result, velocity, cosmeticBullet) end)
-connection:Disconnect() -- stop listening
-
-caster.Pierced:Connect(function(cast, result, velocity, cosmeticBullet) end)
-caster.LengthChanged:Connect(function(cast, lastPoint, rayDir, rayDisplacement, velocity, cosmeticBullet) end)
-caster.CastFire:Connect(function(cast, origin, direction, velocity, behavior) end)
-caster.CastTerminating:Connect(function(cast) end)
-```
-
-`CanPierce` is a query that must return a boolean, so it stays a single function:
-
-```lua
-caster.CanPierce = function(cast, result, velocity, cosmeticBullet) -> boolean end
-```
-
-For backwards compatibility, assigning a function to a signal event is shorthand
-for `:Connect` and replaces any previous function assigned this way:
-
-```lua
-caster.Hit = function(cast, result, velocity, cosmeticBullet) end
-```
-
-`Signal` supports `Connect`, `Once`, `Wait`, `Fire`, `DisconnectAll`, and `Destroy`.
-
-#### 1.1.3 Movement Modes
-
-- **`"BulkMoveTo"`** — Uses `workspace:BulkMoveTo()` each frame. (General/Default)
-- **`"Motor6D"`** — Uses Motor6D instances (Transform property). Better for performance.
-
-Switch modes at runtime with `caster:SetMovementModeEnabled(enabled, mode)`.
-
----
-
-### 1.2 Parallel Mode (`FastCast.newParallel()`)
+### 1.1 Parallel Caster (`FastCast.new()`)
 
 Parallel Caster runs cast simulations on separate Actor VMs.
 
 ```lua
-local caster = FastCast2.newParallel()
+local caster = FastCast2.new()
 caster:Init(
     numWorkers,          -- number of worker VMs (must be at least 1)
     movementMode,        -- "BulkMoveTo" or "Motor6D"
@@ -283,7 +234,7 @@ cast.RayInfo.Radius: number      -- Spherecast only
 
 ## 4. FastCastEventsModule
 
-Parallel-mode only. A `ModuleScript` that returns a `FastCastEvents` table for direct (non-BindableEvent) callbacks, providing better performance for high-frequency events like `LengthChanged`.
+Parallel-only. A `ModuleScript` that returns a `FastCastEvents` table for direct (non-BindableEvent) callbacks, providing better performance for high-frequency events like `LengthChanged`.
 
 ```lua
 -- In a ModuleScript (e.g., ReplicatedStorage.FastCastEventsModule)
@@ -309,7 +260,7 @@ Register it:
 caster:SetFastCastEventsModule(pathToModule)
 ```
 
-> **Note**: Not available in Serial mode, it use direct event callbacks instead.
+> **Note**: This event module is used by parallel workers for direct callbacks.
 
 ---
 

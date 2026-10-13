@@ -17,58 +17,12 @@ end
 caster:RaycastFire(origin, direction, 500, behavior)
 ```
 
-## Caster — Serial Mode
+## Caster
 
 ```lua
 --// Construct & Init
 
-local Caster = FastCast2.new()  -- Construct a new Serial Caster
-
-Caster:Init(
-    movementMode: "BulkMoveTo" | "Motor6D"  -- Movement method.
-)
--- ⚠ Must be called before any Fire methods — nothing happens without Init!
-
-
---// Events (assign callbacks before Init)
-
-Caster.Hit = function(cast, result, velocity, cosmeticBullet) end
-Caster.Pierced = function(cast, result, velocity, cosmeticBullet) end
-Caster.LengthChanged = function(cast, lastPoint, rayDir, rayDisplacement) end
-Caster.CastFire = function(cast, origin, direction, velocity, behavior) end
-Caster.CastTerminating = function(cast) end
-Caster.CanPierce = function(cast, result, velocity, cosmeticBullet) -> boolean end
-
---// Fire Methods
-
-Caster:RaycastFire(origin, direction, velocity, BehaviorData)
-Caster:BlockcastFire(origin, Size, direction, velocity, BehaviorData)
-Caster:SpherecastFire(origin, Radius, direction, velocity, BehaviorData)
-
--- Example:
--- caster:RaycastFire(Vector3.new(0,5,0), Vector3.new(0,0,-1), 500, behavior)
--- caster:BlockcastFire(Vector3.new(0,5,0), Vector3.new(2,2,2), Vector3.new(0,0,-1), 500, behavior)
--- caster:SpherecastFire(Vector3.new(0,5,0), 3, Vector3.new(0,0,-1), 500, behavior)
-
-
---// Configuration
-
-Caster:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D") → ()
-
-
---// Lifecycle
-
-Caster:Destroy() → ()
-```
-
----
-
-## Caster — Parallel Mode
-
-```lua
---// Construct & Init
-
-local Caster = FastCast2.newParallel()
+local Caster = FastCast2.new()
 
 Caster:Init(
     numWorkers: number,                 -- Number of Actor VMs. Must be at least 1.

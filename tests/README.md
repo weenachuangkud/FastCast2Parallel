@@ -46,8 +46,8 @@ see [the hot-path runner](hotpaths/README.md) (`npm run test:hotpaths`).
   firing, every public event, movement modes, cast manipulation, high-fidelity behavior,
   and the parallel-only extensions
   (`SetFastCastEventsModule`, `SyncChangesToCast`).
-- **Benchmarks** (`tests/src/Benchmarks.luau`) run a fixed six-case matrix of
-  Serial/Parallel x Raycast/Blockcast/Spherecast, reporting creation and
+- **Benchmarks** (`tests/src/Benchmarks.luau`) run a fixed three-case matrix of
+  Parallel x Raycast/Blockcast/Spherecast, reporting creation and
   cleanup cost plus simulation frame-time percentiles. Adjust projectile count,
   sample duration, and worker count in `Benchmarks.DefaultConfig`.
 
