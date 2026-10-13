@@ -382,14 +382,17 @@ local function deepCopyTable(tbl: {any}): {any}
 end
 
 --[=[
-	Creates a new FastCastBehavior, which contains information necessary to Fire the cast properly.
-	
-	@--[=[
-	Creates a new Parallel Caster. Cast simulations run on separate worker VMs.
+	Creates a new FastCastBehavior, which contains information necessary to fire the cast properly.
 
-	:::warning
+	@return FastCastBehavior
+]=]
+function FastCast.newBehavior(): TypeDef.FastCastBehavior
+	return deepCopyTable(DefaultConfigs.FastCastBehavior) :: TypeDef.FastCastBehavior
+end
+
+--[=[
+	Creates a new parallel caster. Cast simulations run on separate worker VMs.
 	Initialize the caster before firing projectiles.
-	:::
 
 	@function new
 	@within FastCast
@@ -404,13 +407,6 @@ function FastCast.new()
 	}
 	setmetatable(caster, FastCastParallel)
 	return caster
-end
-
-return FastCast
-Behavior
-]=]
-function FastCast.newBehavior(): TypeDef.FastCastBehavior
-	return deepCopyTable(DefaultConfigs.FastCastBehavior) :: TypeDef.FastCastBehavior
 end
 
 -- Batched parallel dispatch. Shots are queued and sent once per frame per
