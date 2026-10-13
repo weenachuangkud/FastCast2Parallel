@@ -32,7 +32,7 @@ Caster:Init(
 -- ⚠ Must be called before any Fire methods — nothing happens without Init!
 
 
---// Fire Methods (same as Serial)
+--// Fire Methods
 
 Caster:RaycastFire(origin, direction, velocity, BehaviorData)
 Caster:BlockcastFire(origin, Size, direction, velocity, BehaviorData)

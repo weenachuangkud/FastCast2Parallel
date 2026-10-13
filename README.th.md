@@ -84,66 +84,51 @@ FastCast2 เป็นโปรเจกต์ open-source และยินด
 
 # ตัวอย่างโค้ด
 
-การยิง projectile จากหัวตัวละคร (โหมด Serial - ใช้งานง่าย รันบน main thread):
+ตัวอย่างเริ่มต้น: ยิง projectile จากตำแหน่งหัวตัวละครด้วย Parallel caster
 
 ```lua
--- Services
 local Rep = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-
--- Requires
 local FastCast2 = require(Rep:WaitForChild("FastCast2"))
-local FastCastEnums = require(Rep:WaitForChild("FastCast2"):WaitForChild("FastCastEnums"))
+local FastCastEnums = require(Rep.FastCast2:WaitForChild("FastCastEnums"))
 
--- CONSTANTS
 local SPEED = 500
-
--- Variables
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
-local Head = character:WaitForChild("Head")
-local Mouse = player:GetMouse()
+local head = character:WaitForChild("Head")
+local mouse = player:GetMouse()
+local projectileContainer = workspace:WaitForChild("Projectiles")
+local projectileTemplate = Rep:WaitForChild("Projectile")
 
-local ProjectileContainer = workspace:WaitForChild("Projectiles")
-local ProjectileTemplate = Rep:WaitForChild("Projectile")
+local castParams = RaycastParams.new()
+castParams.FilterDescendantsInstances = { character }
+castParams.FilterType = Enum.RaycastFilterType.Exclude
+castParams.IgnoreWater = true
 
--- CastParams
-local CastParams = RaycastParams.new()
-CastParams.FilterDescendantsInstances = {character}
-CastParams.FilterType = Enum.RaycastFilterType.Exclude
-CastParams.IgnoreWater = true
-
--- Behavior (FastCastBehavior)
 local behavior = FastCast2.newBehavior()
 behavior.MaxDistance = 1000
-behavior.RaycastParams = CastParams
+behavior.RaycastParams = castParams
 behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Default
 behavior.HighFidelitySegmentSize = 1
-behavior.Acceleration = Vector3.new(0, -workspace.Gravity/2.3, 0)
-behavior.CosmeticBulletContainer = ProjectileContainer
-behavior.CosmeticBulletTemplate = ProjectileTemplate
+behavior.Acceleration = Vector3.new(0, -workspace.Gravity / 2.3, 0)
+behavior.CosmeticBulletContainer = projectileContainer
+behavior.CosmeticBulletTemplate = projectileTemplate
 
+local caster = FastCast2.new()
+caster:Init(4, "BulkMoveTo", nil)
 
--- Parallel Caster (จำลอง projectile บน worker VMs)
-local Caster = FastCast2.new()
-Caster:Init("BulkMoveTo") -- movementMode
-
--- Events (ตั้งค่าได้ก่อน Init)
-Caster.Hit = function(cast, result, velocity, bullet)
+caster.Hit = function(cast, result)
 	print("Hit: " .. result.Instance.Name)
 end
 
--- Fire
 local function fire()
-	local origin = Head.Position
-	local direction = (Mouse.Hit.Position - origin).Unit
-	Caster:RaycastFire(origin, direction, SPEED, behavior)
+	local origin = head.Position
+	local direction = (mouse.Hit.Position - origin).Unit
+	caster:RaycastFire(origin, direction, SPEED, behavior)
 end
 
--- Input
 game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton1 then
 		fire()
 	end
 end)
@@ -167,42 +152,7 @@ FastCast2 ไม่มี ObjectCache ในตัวแล้ว คุณส�
 
 FastCast2 จะไม่ลบหรือคืน cosmetic bullet ให้อัตโนมัติเมื่อ cast จบ ทำให้คุณควบคุม lifecycle ของ projectile visual ได้เอง
 
-### โหมด Parallel
- (ประสิทธิภาพสูงด้วยหลาย VM)
-
-```lua
-local Caster = FastCast2.new()
-Caster:Init(
-	4,                 -- numWorkers
-	workspace,         -- VM folder parent
-	"FastCastVMs",     -- VM folder name
-	workspace,         -- container parent
-	"VMContainer",     -- container name
-	"VM",              -- VM name
-	"BulkMoveTo",      -- movementMode
-	nil,               -- FastCastEventsModule (ไม่บังคับ)
-)
-
--- Events ทำงานเหมือนกับโหมด Serial
-Caster.Hit = function(cast, result, velocity, bullet)
-	print("Hit: " .. result.Instance.Name)
-end
-
---[[
-	-- ยกเว้น:
-	-- Caster.CanPierce
-	--> ต้องใช้ FastCastEventsModule แทน
-]]
-
--- การ Fire ก็ใช้แบบเดียวกับ Serial
-Caster:RaycastFire(origin, direction, SPEED, behavior)
-Caster:BlockcastFire(origin, Vector3.new(2, 4, 2), direction, SPEED, behavior)
-Caster:SpherecastFire(origin, 3, direction, SPEED, behavior)
-```
-
-<br />
-
-วิธีตั้งค่า [FastCastEventsModule](https://weenachuangkud.github.io/FastCast2/api/TypeDefinitions/#FastCastEventsModule)
+วิธีตั้งค่า [FastCastEventsModule](https://weenachuangkud.github.io/FastCast2Parallel/api/TypeDefinitions/#FastCastEventsModule)
 
 ```lua
 -- Services
@@ -267,7 +217,7 @@ return module
 Caster:SetFastCastEventsModule(pathTo.FastCastEventsModule)
 ```
 
-> **หมายเหตุ**: `SetFastCastEventsModule` ใช้ได้เฉพาะกับ parallel caster เท่านั้น ส่วนโหมด serial ให้ตั้งค่า event handler ได้โดยตรง (เช่น `Caster.Hit = function(...)`)
+
 
 ### โหมดการเคลื่อนที่แบบ Motor6D
 
@@ -275,7 +225,7 @@ Caster:SetFastCastEventsModule(pathTo.FastCastEventsModule)
 
 ```lua
 local Caster = FastCast2.new()
-Caster:Init("Motor6D") -- movementMode = "Motor6D"
+Caster:Init(4, "Motor6D") -- numWorkers, movementMode
 ```
 
 ทุก cast ที่ active จะได้รับการเชื่อมต่อ Motor6D โดยอัตโนมัติเมื่อลงทะเบียน และตัดการเชื่อมต่อเมื่อ cleanup
@@ -324,7 +274,7 @@ FastCast2:TerminateCast(cast)
 
 > **เคล็ดลับ**: ในโหมด parallel ให้เรียก `Caster:SyncChangesToCast(cast)` หลังจากแก้ไขค่า เพื่อส่งการเปลี่ยนแปลงเข้าไปยัง worker VM
 
-### -> เริ่มต้นใช้งานได้ที่ [เอกสาร FastCast2](https://weenachuangkud.github.io/FastCast2/docs/api-reference)
+### -> เริ่มต้นใช้งานได้ที่ [เอกสาร FastCast2](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference)
 
 ---
 

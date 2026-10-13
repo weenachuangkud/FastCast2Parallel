@@ -95,7 +95,7 @@ Caster:Init(
 	nil,               -- FastCastEventsModule (optional)
 )
  
--- Events work the same as serial
+-- Subscribe to caster events
 Caster.Hit = function(cast, result, velocity, bullet)
 	print("Hit: " .. result.Instance.Name)
 end
@@ -106,7 +106,7 @@ end
 	--> You will have to use FastCastEventsModule for that
 ]]
  
--- Fire the same as serial
+-- Fire projectiles
 Caster:RaycastFire(origin, direction, SPEED, behavior)
 Caster:BlockcastFire(origin, Vector3.new(2, 4, 2), direction, SPEED, behavior)
 Caster:SpherecastFire(origin, 3, direction, SPEED, behavior)
@@ -188,7 +188,7 @@ Motor6D mode uses `Motor6D.Transform` for more performance instead of `BulkMoveT
 
 ```lua
 local Caster = FastCast2.new()
-Caster:Init("Motor6D") -- movementMode = "Motor6D"
+Caster:Init(4, "Motor6D") -- numWorkers, movementMode
 ```
 
 All active casts automatically get a Motor6D connection on registration and disconnection on cleanup.
@@ -254,11 +254,11 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide and [`CODE_OF_CONDUC
 
 ## Benchmarks
 
-FastCast2 includes repeatable client and server benchmarks for raycasts, blockcasts, and spherecasts. They compare serial and parallel execution using creation/cleanup throughput and simulation frame-time percentiles. See the [benchmark guide](benchmarks/README.md) for controls and the ready-to-sync Rojo project.
+FastCast2Parallel includes repeatable client and server benchmarks for raycasts, blockcasts, and spherecasts. They measure parallel execution using creation/cleanup throughput and simulation frame-time percentiles. See the [benchmark guide](benchmarks/README.md) for controls and the ready-to-sync Rojo project.
 
 ## Tests
 
-The automated suite runs the functional tests and the six-case benchmark matrix inside Roblox Studio, prints a Markdown results table, and uploads the report to [paste.shellworks.dev](https://paste.shellworks.dev). Run it with `npm test` (or `lune run tests/run.luau`). See the [test guide](tests/README.md) for prerequisites and flags.
+The automated suite runs the functional tests and the three-case parallel benchmark matrix inside Roblox Studio, prints a Markdown results table, and uploads the report to [paste.shellworks.dev](https://paste.shellworks.dev). Run it with `npm test` (or `lune run tests/run.luau`). See the [test guide](tests/README.md) for prerequisites and flags.
 
 
 ---
