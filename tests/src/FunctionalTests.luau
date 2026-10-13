@@ -72,10 +72,7 @@ local function fire(caster: any, castType: string, origin: Vector3, direction: V
 	end
 end
 
-local parallelCounter = 0
-
 local function createParallelCaster(events: { [string]: any }?): any
-	parallelCounter += 1
 	local caster = FastCast.new()
 
 	for name, fn in events or {} do
@@ -158,6 +155,76 @@ return function()
 			end)
 
 			registerParallelCastTypes(test)
+
+			test("movement mode can be switched", function(expect)
+				local caster = createParallelCaster()
+				caster:SetMovementModeEnabled(true, "Motor6D")
+				expect.equal(caster.MovementMode, "Motor6D", "movement mode was not switched to Motor6D")
+
+				caster:SetMovementModeEnabled(true, "BulkMoveTo")
+				expect.equal(caster.MovementMode, "BulkMoveTo", "movement mode was not switched back")
+				caster:Destroy()
+			end)
+
+			test("cast velocity, acceleration and position can be manipulated", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local firedCast = nil
+
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						firedCast = cast
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 1, 0), 60, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return firedCast ~= nil
+				end, HIT_TIMEOUT), "parallel CastFire never ran")
+
+				local cast = firedCast :: any
+				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -100))
+				FastCast:AddVelocityCast(cast, Vector3.new(10, 0, 0))
+				FastCast:SetAccelerationCast(cast, Vector3.new(0, -10, 0))
+				FastCast:AddAccelerationCast(cast, Vector3.new(0, -5, 0))
+				FastCast:SetPositionCast(cast, Vector3.new(5, 5, 5))
+				FastCast:AddPositionCast(cast, Vector3.new(1, 0, 0))
+				caster:SyncChangesToCast(cast)
+
+				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(10, 0, -100), 1e-3, "velocity was not updated")
+				expect.near(FastCast:GetAccelerationCast(cast), Vector3.new(0, -15, 0), 1e-3, "acceleration was not updated")
+				expect.near(FastCast:GetPositionCast(cast), Vector3.new(6, 5, 5), 1e-3, "position was not updated")
+
+				FastCast:TerminateCast(cast)
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("HighFidelity Always still resolves a hit", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelitySegmentSize = 1
+
+				local hitInstance = nil
+				local caster = createParallelCaster({
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return hitInstance ~= nil
+				end, HIT_TIMEOUT), "high-fidelity cast never hit the wall")
+				expect.equal(hitInstance, wall, "high-fidelity cast hit the wrong instance")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
 
 			test("SetFastCastEventsModule forwards module events", function(expect)
 				local arena = createArena()
