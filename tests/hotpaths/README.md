@@ -8,7 +8,7 @@ npm run test:hotpaths
 lune run tests/hotpaths/run.luau path/to/baseline-directory
 ```
 
-The baseline directory must contain `SerialSimulation.luau`. Save that file
+The optional baseline directory must contain `ParallelSimulation.luau`. Save that file
 before making changes to compare against the exact workspace state. Both
 versions use the current Config and dependencies. Nothing is uploaded.
 

@@ -1,5 +1,5 @@
 -- Run from the repository root: lune run tests/hotpaths/run.luau [baseline-directory]
--- The optional directory contains the pre-change SerialSimulation.luau.
+-- Optional baseline source can be supplied as an argument.
 -- Hooks are injected into disposable build copies, never the public API.
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -32,10 +32,9 @@ local function instrument(name, path, simulation)
 	fs.writeFile(build .. "/" .. name .. ".luau", result)
 	modules[name] = { ["$path"] = name .. ".luau" }
 end
-instrument("Optimized", "src/SerialSimulation.luau", "SerialSimulation")
 instrument("Parallel", "src/ParallelSimulation.luau", "ParallelSimulation")
 if process.args[1] then
-	instrument("Baseline", process.args[1] .. "/SerialSimulation.luau", "SerialSimulation")
+	instrument("Baseline", process.args[1] .. "/ParallelSimulation.luau", "ParallelSimulation")
 end
 fs.writeFile(
 	build .. "/default.project.json",

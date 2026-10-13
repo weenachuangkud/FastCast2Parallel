@@ -735,11 +735,6 @@ BenchmarkPackets.Input.listen(function(keyName)
 	end
 
 	-- The server benchmark is parallel-only, so B has no effect here.
-	if keyName == "B" then
-		print("Serial / Parallel toggle isn't available on the server (Parallel only).")
-		return
-	end
-
 	local command = KeyNameToCommand[keyName]
 
 	if command then
