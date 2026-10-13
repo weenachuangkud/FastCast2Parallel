@@ -41,7 +41,7 @@ end
 local ROOT = resolveRoot()
 local PROJECT_FILE = ROOT .. "/tests.project.json"
 local BUILD_DIR = ROOT .. "/build"
-local PLACE_FILE = BUILD_DIR .. "/FastCast2Tests.rbxlx"
+local PLACE_FILE = BUILD_DIR .. "/FastCast2ParallelTests.rbxlx"
 local ENTRY_FILE = ROOT .. "/tests/Entry.luau"
 
 local flags: { [string]: any } = {}
@@ -139,7 +139,7 @@ local function buildMarkdown(payload: any): string
 	local benchmarks = payload.benchmarks or {}
 
 	local parts = {
-		"# FastCast2 test report",
+		"# FastCast2Parallel test report",
 		"",
 		"Generated: " .. (payload.generatedAt or "unknown"),
 		"Context: " .. (payload.runContext or "unknown"),
@@ -195,7 +195,7 @@ local function upload(markdown: string): (string?, string?)
 			headers = { ["Content-Type"] = "application/json" },
 			body = serde.encode("json", {
 				content = markdown,
-				title = "FastCast2 test report",
+				title = "FastCast2Parallel test report",
 				language = "markdown",
 				visibility = "unlisted",
 				expires_in = "2w",

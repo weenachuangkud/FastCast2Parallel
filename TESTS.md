@@ -1,7 +1,6 @@
-# Testing FastCast2
+# Testing FastCast2Parallel
 
-The checklist below is covered by the automated suite. Run it with one command
-from the repository root:
+Run the automated suite from the repository root:
 
 ```sh
 npm test
@@ -9,36 +8,27 @@ npm test
 lune run tests/run.luau
 ```
 
-The runner builds the test place, runs it in Roblox Studio via
-`run-in-roblox`, prints a functional-test summary and a benchmark table, and
-uploads the full report to [paste.shellworks.dev](https://paste.shellworks.dev).
-See [`tests/README.md`](tests/README.md) for prerequisites, flags, and the
-project layout.
+The runner builds a Rojo place, runs it in Roblox Studio through `run-in-roblox`,
+prints a functional-test summary and a three-case parallel benchmark table, and
+uploads the report to [paste.shellworks.dev](https://paste.shellworks.dev).
+See [`tests/README.md`](tests/README.md) for prerequisites and options.
 
-The same cases can still be verified by hand if Studio automation is not
-available.
+## Functional coverage
 
-### Caster
-1. Initialization
-2. Basic raycast/blockcast/spherecast firing
-3. All [events](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference/#112-events) should be able to works
-4. MovementMode
-5. Cast Manipulation
-6. Repeat the same tests above for parallel version
-7. SetFastCastEventsModule (Parallel)
-8. SyncChangesToCast (Parallel)
-### FastCastBehavior
-- https://weenachuangkud.github.io/FastCast2/docs/api-reference/#2-fastcastbehavior
-### ActiveCastData
-- https://weenachuangkud.github.io/FastCast2/docs/api-reference/#3-activecastdata
-### [FastCastEventsModule](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#4-fastcasteventsmodule) (Parallel)
-- All [events](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#112-events) should be able to works
-- [FastCastEventsModuleConfig](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#event-configuration)
-### [High-Fidelity Behavior](https://weenachuangkud.github.io/FastCast2/docs/api-reference/#5-high-fidelity-behavior)
-- Modes (Default, Automatic, Always)
-- HighFidelitySegmentSize
+- Caster initialization and cleanup
+- Raycast, Blockcast, and Spherecast hit/termination behavior
+- Public event callbacks and multiple Signal listeners
+- FastCastEventsModule forwarding
+- Runtime cast manipulation and `SyncChangesToCast`
+- Movement mode changes and high-fidelity behavior
 
-### NOTE
+## Benchmarks
 
-- You do not need to check whether the arguments are correct, handle edge cases, etc., as these are already handled (and should be handled) inside the code.
-- If you pass all the tests without any errors, and the results aren't off, it should pretty much be working fine.
+The automated benchmark runs the parallel implementation with Raycast, Blockcast,
+and Spherecast. It records creation and cleanup throughput plus simulation frame
+time percentiles. Worker count and sample duration are configurable in
+`tests/src/Benchmarks.luau`.
+
+The same behaviors can be checked manually in Studio if automated execution is
+not available. See the [API reference](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference/).
+

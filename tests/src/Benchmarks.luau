@@ -131,6 +131,7 @@ local function runCase(castType: string, caster: any, activeCasts: { any }, conf
 	local cleanupSeconds = os.clock() - cleanupStarted
 
 	local result = {
+		mode = "Parallel",
 		castType = castType,
 		projectiles = config.projectileCount,
 		activeCasts = activeCount,

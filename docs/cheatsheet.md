@@ -2,7 +2,7 @@
 sidebar_position: 2
 ---
 
-# FastCast2 CheatSheet
+# FastCast2Parallel CheatSheet
 
 ## Quick Example
 

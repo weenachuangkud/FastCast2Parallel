@@ -1,6 +1,6 @@
-# Contributing to FastCast2
+# Contributing to FastCast2Parallel
 
-**Thank you** for considering contributing to FastCast2!  
+**Thank you** for considering contributing to FastCast2Parallel!  
 This project is open-source and community-driven, and **all kinds of help are welcome**, code or documentation, bug reports, examples, ideas, or even just spreading the word.
 
 ### How to Contribute
@@ -67,6 +67,6 @@ Feel free to ask anything:
 - The [DevForum thread](https://devforum.roblox.com/t/fastcast2-an-improved-version-of-fastcast-with-parallel-scripting-more-extensions-and-statically-typed/4093890)
 - Or ping me directly
 
-Thanks again for helping make FastCast2 better!  
+Thanks again for helping make FastCast2Parallel better!  
 
    Mawin CK - 2025

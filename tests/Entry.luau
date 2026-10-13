@@ -62,6 +62,6 @@ end
 attributeConnection:Disconnect()
 logConnection:Disconnect()
 
-assert(encoded ~= nil, "Timed out waiting for the FastCast2 test harness")
+assert(encoded ~= nil, "Timed out waiting for the FastCast2Parallel test harness")
 
 print(SENTINEL .. " " .. encoded)

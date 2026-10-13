@@ -1,4 +1,4 @@
-# FastCast2 Documentation
+# FastCast2Parallel Documentation
 
 ## 1. Caster
 

@@ -1,13 +1,13 @@
 # Tests
 
-Automated FastCast2 test + benchmark suite. One command builds a Rojo place,
+Automated FastCast2Parallel test + benchmark suite. One command builds a Rojo place,
 runs it inside Roblox Studio with `run-in-roblox`, renders the results as a
 Markdown table, and uploads the report to
 [paste.shellworks.dev](https://paste.shellworks.dev).
 
 ## Prerequisites
 
-FastCast2 exercises real Roblox APIs (raycasts, `BulkMoveTo`, Actor-based
+FastCast2Parallel exercises real Roblox APIs (raycasts, `BulkMoveTo`, Actor-based
 parallel VMs), so the suite runs inside Studio rather than a standalone Luau
 runtime.
 
@@ -55,7 +55,7 @@ see [the hot-path runner](hotpaths/README.md) (`npm run test:hotpaths`).
 > bounded by Studio's frame rate (about `16.7 ms` at the default 60 FPS cap).
 > Use them to compare cases within a single run, not across machines.
 
-The console and the uploaded report both include this table:
+The console and uploaded report include a parallel-only benchmark table:
 
 ```
 | Mode | Cast | Create | Avg frame | P95 | P99 | Cleanup |
