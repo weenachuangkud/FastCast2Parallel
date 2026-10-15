@@ -225,7 +225,7 @@ Caster:SetFastCastEventsModule(pathTo.FastCastEventsModule)
 
 ```lua
 local Caster = FastCast2.new()
-FastCast2.Init(4, "Motor6D") -- numWorkers, movementMode
+FastCast2.SetMovementModeEnabled(true, "Motor6D") -- โหมดการเคลื่อนที่ร่วม
 ```
 
 ทุก cast ที่ active จะได้รับการเชื่อมต่อ Motor6D โดยอัตโนมัติเมื่อลงทะเบียน และตัดการเชื่อมต่อเมื่อ cleanup
