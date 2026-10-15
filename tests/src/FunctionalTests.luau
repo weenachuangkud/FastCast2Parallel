@@ -79,11 +79,6 @@ local function createParallelCaster(events: { [string]: any }?): any
 		caster[name] = fn
 	end
 
-	caster:Init(
-		2,
-		"BulkMoveTo"
-	)
-
 	return caster
 end
 
@@ -147,9 +142,10 @@ return function()
 		end),
 
 		Framework.describe("FastCast", function(test)
-			test("initializes and destroys", function(expect)
+			test("initializes shared runtime and creates casters", function(expect)
+				FastCast.Init(2, "BulkMoveTo")
 				local caster = createParallelCaster()
-				expect.equal(caster.AlreadyInit, true, "parallel caster was not marked initialized")
+				expect.equal(type(caster.CasterId), "number", "caster did not receive a numeric ID")
 
 				caster:Destroy()
 			end)
