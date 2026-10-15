@@ -177,17 +177,9 @@ export type CasterParallel = {
 	Pierced: Signal.Signal<OnPiercedFunction> | OnPiercedFunction,
 	CastTerminating: Signal.Signal<OnCastTerminatingFunction> | OnCastTerminatingFunction,
 	CastFire: Signal.Signal<OnCastFireFunction> | OnCastFireFunction,
-	Dispatcher: Dispatcher.Dispatcher?,
-	AlreadyInit: boolean,
+	CasterId: number,
 	MovementMode: ("BulkMoveTo" | "Motor6D")?,
 	FastCastEventsModule: FastCastEventsModule?,
-
-	Init: (
-		self: CasterParallel,
-		numWorkers: number,
-		movementMode: "BulkMoveTo" | "Motor6D",
-		FastCastEventsModule: ModuleScript?
-	) -> (),
 
 	RaycastFire: (
 		self: CasterParallel,
@@ -218,7 +210,7 @@ export type CasterParallel = {
 		enabled: boolean,
 		mode: "BulkMoveTo" | "Motor6D"
 	) -> (),
-	SetFastCastEventsModule: (self: CasterParallel, moduleScript: ModuleScript) -> (),
+	SetFastCastEventsModule: (self: CasterParallel, moduleScript: ModuleScript?) -> (),
 
 	AddVelocityCast: (self: CasterParallel, cast: vaildcast, velocity: Vector3) -> (),
 	SetVelocityCast: (self: CasterParallel, cast: vaildcast, velocity: Vector3) -> (),
@@ -390,6 +382,7 @@ export type BaseCastData = {
 ]=]
 export type ActiveCastData = {
 	Caster: BaseCastData,
+	CasterId: number,
 	StateInfo: CastStateInfo,
 	RayInfo: CastRayInfo,
 	UserData: { [any]: any },
@@ -409,6 +402,7 @@ export type ActiveCastData = {
 ]=]
 export type ActiveBlockcastData = {
 	Caster: BaseCastData,
+	CasterId: number,
 	StateInfo: CastStateInfo,
 	RayInfo: BlockCastRayInfo,
 	UserData: { [any]: any },
@@ -428,6 +422,7 @@ export type ActiveBlockcastData = {
 ]=]
 export type ActiveSpherecastData = {
 	Caster: BaseCastData,
+	CasterId: number,
 	StateInfo: CastStateInfo,
 	RayInfo: SphereCastRayInfo,
 	UserData: { [any]: any },

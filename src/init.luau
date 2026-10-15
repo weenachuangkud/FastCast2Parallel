@@ -254,24 +254,62 @@ local function NewIndexCaster(self, key, value)
 	rawset(self, key, value)
 end
 
--- Demux a batch of worker events (see ParallelSimulation.FireQueuedEvents).
--- Record layout: { eventType, cast, args, argCount }
-local function DispatchOutputBatch(self, batch)
+local CasterRegistry: { [number]: any } = {}
+local NextCasterId = 0
+local RuntimeInitialized = false
+local RuntimeMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
+local DefaultFastCastEventsModule: ModuleScript? = nil
+local DestroyingCasters: { [number]: { caster: any, remaining: number } } = {}
+
+-- Demux worker event batches by numeric CasterId instead of binding the
+-- shared worker pool to a single caster.
+local function DispatchOutputBatch(batch)
 	for i = 1, #batch do
 		local record = batch[i]
 		local signalName = OUTPUT_EVENT_NAMES[record[1]]
+		local cast = record[2]
+		local caster = cast and CasterRegistry[cast.CasterId]
 
-		if signalName then
-			local signal = self[signalName]
+		if signalName and caster then
+			local signal = caster[signalName]
 			if Signal.is(signal) then
 				local argCount = record[4]
 				if argCount > 0 then
-					signal:Fire(record[2], table.unpack(record[3], 1, argCount))
+					signal:Fire(cast, table.unpack(record[3], 1, argCount))
 				else
-					signal:Fire(record[2])
+					signal:Fire(cast)
 				end
 			end
 		end
+	end
+end
+
+local function FinalizeDestroyedCaster(casterId: number)
+	local state = DestroyingCasters[casterId]
+	if not state then
+		return
+	end
+
+	local caster = state.caster
+	DestroyingCasters[casterId] = nil
+	CasterRegistry[casterId] = nil
+	DestroyCasterSignals(caster)
+	rawset(caster, "CasterId", nil)
+	rawset(caster, "FastCastEventsModule", nil)
+	rawset(caster, "_destroying", nil)
+	setmetatable(caster, nil)
+	rawset(caster, "Destroy", function() end)
+end
+
+local function HandleCasterDestroyed(casterId: number)
+	local state = DestroyingCasters[casterId]
+	if not state then
+		return
+	end
+
+	state.remaining -= 1
+	if state.remaining <= 0 then
+		FinalizeDestroyedCaster(casterId)
 	end
 end
 
@@ -399,13 +437,18 @@ end
 	@return CasterParallel
 ]=]
 function FastCast.new()
+	NextCasterId += 1
+
 	local caster = {
+		CasterId = NextCasterId,
 		_events = NewCasterSignals(),
 		WorldRoot = workspace,
-		Dispatcher = nil,
-		AlreadyInit = false
+		FastCastEventsModule = DefaultFastCastEventsModule,
+		MovementMode = RuntimeMovementMode,
 	}
+
 	setmetatable(caster, FastCastParallel)
+	CasterRegistry[caster.CasterId] = caster
 	return caster
 end
 
@@ -486,77 +529,111 @@ local function FlushFires()
 end
 
 --[=[
-	Initializes the Caster with the given parameters. This is required before firing using Raycasts in the Caster or nothing will happen!
+	Initialize the shared parallel simulation runtime.
 	@method Init
-	@within FastCastParallel
-	
-	@param numWorkers number -- Number of workers for parallel luau
-	@param movementMode "BulkMoveTo" | "Motor6D" -- MovementMode for projectiles
-	@param FastCastEventsModule ModuleScript? -- Optional ModuleScript containing the FastCastEvents, A table of callback functions (events/hooks) used by ActiveCast..
+	@within FastCast
+
+	@param numWorkers number -- Number of parallel workers.
+	@param movementMode "BulkMoveTo" | "Motor6D"? -- Shared movement mode. Defaults to "BulkMoveTo".
+	@param FastCastEventsModule ModuleScript? -- Optional default events module for casters without their own.
 ]=]
-function FastCastParallel:Init(
+function FastCast.Init(
 	numWorkers: number,
-	movementMode: "BulkMoveTo" | "Motor6D",
+	movementMode: "BulkMoveTo" | "Motor6D"?,
 	FastCastEventsModule: ModuleScript?
 )
-	if self.AlreadyInit then
-		warn("Cannot Init more than 1")
+	if RuntimeInitialized then
+		local initializedWorkerCount = ParallelDispatcher and #ParallelDispatcher.Threads or 0
+		if numWorkers ~= initializedWorkerCount then
+			warn("[FastCast2] FastCast.Init() already initialized with "
+				.. initializedWorkerCount .. " workers; ignoring the new worker count.")
+		end
+
+		if movementMode and movementMode ~= RuntimeMovementMode then
+			FastCast.SetMovementModeEnabled(true, movementMode)
+		end
+
+		if FastCastEventsModule then
+			DefaultFastCastEventsModule = FastCastEventsModule
+			for _, caster in CasterRegistry do
+				if not caster.FastCastEventsModule then
+					caster.FastCastEventsModule = FastCastEventsModule
+				end
+			end
+		end
 		return
 	end
-	assert(numWorkers >= 1, "numWorkers must be at least 1")
 
-	local DispatcherClone = DispatcherModule:Clone()
-	DispatcherClone.Parent = PARALLEL_PARENT
-	DispatcherClone.Name = DISPATCHER_NAME
+	assert(type(numWorkers) == "number" and numWorkers >= 1 and numWorkers % 1 == 0,
+		"numWorkers must be a positive integer")
 
-	local newDispatcher: Dispatcher.Dispatcher = require(DispatcherClone) :: Dispatcher.Dispatcher
+	local dispatcherClone = DispatcherModule:Clone()
+	dispatcherClone.Parent = PARALLEL_PARENT
+	dispatcherClone.Name = DISPATCHER_NAME
 
+	local newDispatcher: Dispatcher.Dispatcher = require(dispatcherClone) :: Dispatcher.Dispatcher
 	newDispatcher.Init(PARALLEL_PARENT, VM_CONTAINER_NAME, VM_NAME)
 
 	local data = {
-		movementMode = movementMode,
+		movementMode = movementMode or "BulkMoveTo",
 		FastCastModule = script
 	}
+
 	ParallelDispatcher = newDispatcher.new(numWorkers, data, function(eventName: string, ...)
 		if eventName == "Batch" then
-			DispatchOutputBatch(self, ...)
+			DispatchOutputBatch(...)
 			return
 		end
 
-		local signal = self[eventName]
+		if eventName == "CasterDestroyed" then
+			HandleCasterDestroyed(...)
+			return
+		end
+
+		local cast = select(1, ...)
+		local caster = cast and CasterRegistry[cast.CasterId]
+		local signal = caster and caster[eventName]
 		if Signal.is(signal) then
 			signal:Fire(...)
 		end
 	end)
-	self.Dispatcher = ParallelDispatcher
 
-	-- Queue shots and flush them once per frame (see FlushFires).
+	RuntimeMovementMode = movementMode or "BulkMoveTo"
+	DefaultFastCastEventsModule = FastCastEventsModule
+	for _, caster in CasterRegistry do
+		caster.MovementMode = RuntimeMovementMode
+		if FastCastEventsModule and not caster.FastCastEventsModule then
+			caster.FastCastEventsModule = FastCastEventsModule
+		end
+	end
+
 	if not FireFlushConnection then
 		FireFlushConnection = RunService.PreSimulation:Connect(FlushFires)
 	end
 
-	self.AlreadyInit = true
-	self.MovementMode = movementMode
-
-	if FastCastEventsModule then
-		self:SetFastCastEventsModule(FastCastEventsModule)
-	end
+	RuntimeInitialized = true
 end
 
 --[=[
-	Set the FastCastEventsModule for all BaseCasts created from this Caster.
+	Set the FastCastEventsModule used by casts fired from this caster.
 	
 	@method SetFastCastEventsModule
 	@within FastCastParallel
 	
-	@param moduleScript ModuleScript -- The FastCastEventsModule to set.
+	@param moduleScript ModuleScript? -- The FastCastEventsModule to set, or nil to disable it.
 ]=]
-function FastCastParallel:SetFastCastEventsModule(moduleScript: ModuleScript)
-	if not self.AlreadyInit then
-		error("Please Init caster")
+function FastCastParallel:SetFastCastEventsModule(moduleScript: ModuleScript?)
+	if moduleScript ~= nil
+		and (typeof(moduleScript) ~= "Instance" or not moduleScript:IsA("ModuleScript"))
+	then
+		error("FastCastEventsModule must be a ModuleScript")
+	end
+	if not self.CasterId or self._destroying then
+		error("This caster has been destroyed")
 	end
 
-	ParallelDispatcher:DispatchAll("SetFastCastEventsModule", moduleScript)
+	-- The module travels with each cast request, allowing separate casters to
+	-- use different event modules on the shared worker pool.
 	self.FastCastEventsModule = moduleScript
 end
 
@@ -576,8 +653,11 @@ function FastCastParallel:RaycastFire(
 	velocity: Vector3 | number,
 	BehaviorData: TypeDef.FastCastBehavior?
 )
-	if not self.AlreadyInit then
-		error("Please Init caster")
+	if not RuntimeInitialized then
+		error("Please call FastCast.Init() before firing casts")
+	end
+	if not self.CasterId or self._destroying then
+		error("This caster has been destroyed")
 	end
 	if BehaviorData == nil then
 		BehaviorData = FastCast.newBehavior()
@@ -585,10 +665,12 @@ function FastCastParallel:RaycastFire(
 
 	QueueFire({
 		1,
+		self.CasterId,
 		origin,
 		direction,
 		velocity,
-		SnapshotBehavior(BehaviorData)
+		SnapshotBehavior(BehaviorData),
+		self.FastCastEventsModule
 	})
 end
 
@@ -610,8 +692,11 @@ function FastCastParallel:BlockcastFire(
 	velocity: Vector3 | number,
 	BehaviorData: TypeDef.FastCastBehavior?
 )
-	if not self.AlreadyInit then
-		error("Please Init caster")
+	if not RuntimeInitialized then
+		error("Please call FastCast.Init() before firing casts")
+	end
+	if not self.CasterId or self._destroying then
+		error("This caster has been destroyed")
 	end
 	if BehaviorData == nil then
 		BehaviorData = FastCast.newBehavior()
@@ -619,11 +704,13 @@ function FastCastParallel:BlockcastFire(
 
 	QueueFire({
 		2,
+		self.CasterId,
 		origin,
 		Size,
 		direction,
 		velocity,
-		SnapshotBehavior(BehaviorData)
+		SnapshotBehavior(BehaviorData),
+		self.FastCastEventsModule
 	})
 end
 
@@ -645,8 +732,11 @@ function FastCastParallel:SpherecastFire(
 	velocity: Vector3 | number,
 	BehaviorData: TypeDef.FastCastBehavior?
 )
-	if not self.AlreadyInit then
-		error("Please Init caster")
+	if not RuntimeInitialized then
+		error("Please call FastCast.Init() before firing casts")
+	end
+	if not self.CasterId or self._destroying then
+		error("This caster has been destroyed")
 	end
 	if BehaviorData == nil then
 		BehaviorData = FastCast.newBehavior()
@@ -654,11 +744,13 @@ function FastCastParallel:SpherecastFire(
 
 	QueueFire({
 		3,
+		self.CasterId,
 		origin,
 		Radius,
 		direction,
 		velocity,
-		SnapshotBehavior(BehaviorData)
+		SnapshotBehavior(BehaviorData),
+		self.FastCastEventsModule
 	})
 end
 
@@ -670,14 +762,20 @@ end
 	@param mode "BulkMoveTo" | "Motor6D" -- The movement mode to set for casts.
 	@within FastCastParallel
 ]=]
-function FastCastParallel:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
-	if not self.AlreadyInit or not self.Dispatcher then
-		warn("Caster not initialized", self)
+function FastCast.SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
+	if not RuntimeInitialized or not ParallelDispatcher then
 		return
 	end
 
 	ParallelDispatcher:DispatchAll("SetMovementModeEnabled", enabled, mode)
-	self.MovementMode = mode
+	RuntimeMovementMode = mode
+	for _, caster in CasterRegistry do
+		caster.MovementMode = mode
+	end
+end
+
+function FastCastParallel:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
+	FastCast.SetMovementModeEnabled(enabled, mode)
 end
 
 function FastCastParallel:Destroy()
@@ -685,23 +783,40 @@ function FastCastParallel:Destroy()
 		return
 	end
 
-	if FireFlushConnection then
-		FireFlushConnection:Disconnect()
-		FireFlushConnection = nil
+	local casterId = self.CasterId
+	if not casterId or self._destroying then
+		return
+	end
+	self._destroying = true
+
+	-- Drop queued (not-yet-dispatched) requests for only this caster.
+	local writeIndex = 1
+	for readIndex = 1, #FireQueue do
+		local request = FireQueue[readIndex]
+		if request[2] ~= casterId then
+			FireQueue[writeIndex] = request
+			writeIndex += 1
+		end
+	end
+	for index = writeIndex, #FireQueue do
+		FireQueue[index] = nil
 	end
 
-	if ParallelDispatcher then
-		ParallelDispatcher:Destroy()
-		ParallelDispatcher = nil
+	if not RuntimeInitialized or not ParallelDispatcher then
+		CasterRegistry[casterId] = nil
+		DestroyCasterSignals(self)
+		rawset(self, "CasterId", nil)
+		rawset(self, "FastCastEventsModule", nil)
+		setmetatable(self, nil)
+		rawset(self, "Destroy", function() end)
+		return
 	end
 
-	table.clear(FireQueue)
-	table.clear(FireBatches)
-	table.clear(FireUsed)
-
-	DestroyCasterSignals(self)
-	self.Destroy = function() end
-	setmetatable(self, nil)
+	DestroyingCasters[casterId] = {
+		caster = self,
+		remaining = #ParallelDispatcher.Threads
+	}
+	ParallelDispatcher:DispatchAll("DestroyCaster", casterId)
 end
 
 -- Utility Methods

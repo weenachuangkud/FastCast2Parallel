@@ -170,12 +170,11 @@ end
 --// Caster Creation
 
 local function createCaster()
-	local caster = FastCast.new()
-
-	caster:Init(
+	FastCast.Init(
 		Config.NumWorkers,
 		Config.MovementMode
 	)
+	local caster = FastCast.new()
 
 	caster.CastFire = onCastFire
 

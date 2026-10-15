@@ -11,7 +11,6 @@ local ActiveCast = require(FastCast2:WaitForChild("ActiveCast"))
 local TypeDef = require(FastCast2:WaitForChild("TypeDefinitions"))
 local ParallelSimulation = require(FastCast2:WaitForChild("ParallelSimulation"))
 local Motor6DCache = require(FastCast2:WaitForChild("Motor6DCache"))
-local FastCastEventsModule: ModuleScript? = nil
 
 local EnumCastTypes = FastCastEnums.CastType
 
@@ -25,7 +24,6 @@ local Motor6DCacheInstance: any = nil
 local NextProjectileID = 0
 local SyncChanges: BindableEvent = nil
 local SyncChangesConnection: RBXScriptConnection? = nil
-local CastFireFunc = nil
 local CurrentMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
 
 local function SendCastFire(
@@ -67,6 +65,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 	self.Actives = {}
 	self.Actor = Actor
 	Output = BindableOutput
+	self.Output = BindableOutput
 
 	Actor:SetAttribute("FastCast2Ready", true)
 
@@ -85,6 +84,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 	SyncChanges = Instance.new("BindableEvent")
 	SyncChanges.Name = "SyncChanges"
 	SyncChanges.Parent = Actor
+	self.SyncChange = SyncChanges
 
 	SyncChangesConnection = SyncChanges.Event:Connect(function(cast: TypeDef.ActiveCastData)
 		local ID = cast.ID
@@ -116,83 +116,89 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 	return self
 end
 
-function BaseCast:Raycast(Origin: Vector3, Direction: Vector3, Velocity: Vector3 | number, Behavior: TypeDef.FastCastBehavior)
+function BaseCast:Raycast(casterId: number, Origin: Vector3, Direction: Vector3, Velocity: Vector3 | number, Behavior: TypeDef.FastCastBehavior, eventModule: ModuleScript?)
 	NextProjectileID += 1
 	local cast = ActiveCast.createCastData({
 		Output = Output,
 		Actor = Actor,
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
-	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
+	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
 		CastType = EnumCastTypes.Raycast
 	} :: any, true)
+	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
 	if Behavior.FastCastEventsConfig.UseCastFire then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig.UseCastFire and CastFireFunc then
-		CastFireFunc(cast, Origin, Direction, Velocity, Behavior)
-	end
-end
-
-function BaseCast:SetFastCastEventsModule(moduleScript: ModuleScript?)
-	if moduleScript ~= nil and (typeof(moduleScript) ~= "Instance" or not moduleScript:IsA("ModuleScript")) then
-		error("FastCastEventsModule must be a ModuleScript")
-	end
-
-	FastCastEventsModule = moduleScript
-	CastFireFunc = nil
-	if moduleScript then
-		local events = require(moduleScript)
-		if type(events) ~= "table" then
-			error("FastCastEventsModule must return a table")
-		end
-		if type(events.CastFire) == "function" then
-			CastFireFunc = events.CastFire
+	if Behavior.FastCastEventsModuleConfig
+		and Behavior.FastCastEventsModuleConfig.UseCastFire
+		and eventModule
+	then
+		local moduleEvents = require(eventModule)
+		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
+		if type(castFire) == "function" then
+			castFire(cast, Origin, Direction, Velocity, Behavior)
 		end
 	end
 end
 
-function BaseCast:Blockcast(Origin: Vector3, Size: Vector3, Direction: Vector3, Velocity: Vector3 | number, Behavior: TypeDef.FastCastBehavior)
+function BaseCast:Blockcast(casterId: number, Origin: Vector3, Size: Vector3, Direction: Vector3, Velocity: Vector3 | number, Behavior: TypeDef.FastCastBehavior, eventModule: ModuleScript?)
 	NextProjectileID += 1
 	local cast = ActiveCast.createCastData({
 		Output = Output,
 		Actor = Actor,
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
-	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
+	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
 		CastType = EnumCastTypes.Blockcast,
 		Size = Size
 	} :: any, true)
+	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
 	if Behavior.FastCastEventsConfig.UseCastFire then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig.UseCastFire and CastFireFunc then
-		CastFireFunc(cast, Origin, Direction, Velocity, Behavior)
+	if Behavior.FastCastEventsModuleConfig
+		and Behavior.FastCastEventsModuleConfig.UseCastFire
+		and eventModule
+	then
+		local moduleEvents = require(eventModule)
+		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
+		if type(castFire) == "function" then
+			castFire(cast, Origin, Direction, Velocity, Behavior)
+		end
 	end
 end
 
-function BaseCast:Spherecast(Origin: Vector3, Radius: number, Direction: Vector3, Velocity: Vector3 | number, Behavior: TypeDef.FastCastBehavior)
+function BaseCast:Spherecast(casterId: number, Origin: Vector3, Radius: number, Direction: Vector3, Velocity: Vector3 | number, Behavior: TypeDef.FastCastBehavior, eventModule: ModuleScript?)
 	NextProjectileID += 1
 	local cast = ActiveCast.createCastData({
 		Output = Output,
 		Actor = Actor,
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
-	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
+	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
 		CastType = EnumCastTypes.Spherecast,
 		Radius = Radius
 	} :: any, true)
+	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
 	if Behavior.FastCastEventsConfig.UseCastFire then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig.UseCastFire and CastFireFunc then
-		CastFireFunc(cast, Origin, Direction, Velocity, Behavior)
+	if Behavior.FastCastEventsModuleConfig
+		and Behavior.FastCastEventsModuleConfig.UseCastFire
+		and eventModule
+	then
+		local moduleEvents = require(eventModule)
+		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
+		if type(castFire) == "function" then
+			castFire(cast, Origin, Direction, Velocity, Behavior)
+		end
 	end
 end
 
@@ -206,11 +212,29 @@ function BaseCast:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | 
 	ParallelSimulation.SetMovementModeEnabled(enabled, mode)
 end
 
+function BaseCast:DestroyCaster(casterId: number)
+	local castIDs = {}
+	for castID, cast in self.Actives do
+		if cast.CasterId == casterId then
+			table.insert(castIDs, castID)
+		end
+	end
+
+	for _, castID in castIDs do
+		local cast = self.Actives[castID]
+		if cast then
+			TerminateCast(cast)
+			self.Actives[castID] = nil
+			ParallelSimulation.Unregister(castID)
+		end
+	end
+
+	Output:Fire("CasterDestroyed", casterId)
+end
+
 function BaseCast:Destroy()
 	if ParallelSimulation then ParallelSimulation.Stop() end
 	if Motor6DCacheInstance then Motor6DCacheInstance:Destroy() end
-	FastCastEventsModule = nil
-	CastFireFunc = nil
 	if SyncChangesConnection then SyncChangesConnection:Disconnect(); SyncChangesConnection = nil end
 	
 	local activeList = {}

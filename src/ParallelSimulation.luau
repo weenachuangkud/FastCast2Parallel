@@ -570,7 +570,6 @@ local function FireQueuedEvents()
 	-- crosses the Actor boundary once per frame instead of once per event.
 	local batch: { any } = {}
 	local batchCount = 0
-	local batchCaster: any = nil
 
 	for i = 1, queuedEventsCount do
 		local offset = (i - 1) * EVENT_STRIDE
@@ -583,8 +582,6 @@ local function FireQueuedEvents()
 		if not cast then
 			continue
 		end
-
-		local caster = cast.Caster
 
 		local moduleConfig = casts_FastCastEventsModuleConfig[castID]
 		local eventConfig = casts_FastCastEventsConfig[castID]
@@ -605,7 +602,6 @@ local function FireQueuedEvents()
 				record[3] = args
 				record[4] = 5
 				batch[batchCount] = record
-				batchCaster = caster
 			end
 
 			if moduleConfig
@@ -636,7 +632,6 @@ local function FireQueuedEvents()
 				record[3] = args
 				record[4] = 3
 				batch[batchCount] = record
-				batchCaster = caster
 			end
 
 			if moduleConfig
@@ -665,7 +660,6 @@ local function FireQueuedEvents()
 				record[3] = args
 				record[4] = 3
 				batch[batchCount] = record
-				batchCaster = caster
 			end
 
 			if moduleConfig
@@ -700,7 +694,6 @@ local function FireQueuedEvents()
 				record[3] = false
 				record[4] = 0
 				batch[batchCount] = record
-				batchCaster = caster
 			end
 
 			if callback then
@@ -713,7 +706,7 @@ local function FireQueuedEvents()
 	end
 
 	if batchCount > 0 then
-		batchCaster.Output:Fire("Batch", batch)
+		BaseCastRef.Output:Fire("Batch", batch)
 	end
 end
 

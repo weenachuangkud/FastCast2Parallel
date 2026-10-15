@@ -161,8 +161,8 @@ local function onCastFire(cast)
 end
 
 local function createCaster()
+	FastCast.Init(Config.NumWorkers, Config.MovementMode)
 	local caster = FastCast.new()
-	caster:Init(Config.NumWorkers, Config.MovementMode)
 	caster.CastFire = onCastFire
 	return caster
 end
