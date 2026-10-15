@@ -609,12 +609,12 @@ function FastCast.Init(
 end
 
 --[=[
-	Set the FastCastEventsModule for all BaseCasts created from this Caster.
+	Set the FastCastEventsModule used by casts fired from this caster.
 	
 	@method SetFastCastEventsModule
 	@within FastCastParallel
 	
-	@param moduleScript ModuleScript -- The FastCastEventsModule to set.
+	@param moduleScript ModuleScript? -- The FastCastEventsModule to set, or nil to disable it.
 ]=]
 function FastCastParallel:SetFastCastEventsModule(moduleScript: ModuleScript?)
 	if moduleScript ~= nil
