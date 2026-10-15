@@ -25,20 +25,15 @@ actor:BindToMessage("Init", function(Data: any?)
 end)
 
 actor:BindToMessage("Raycast", function(
+	casterId: number,
 	origin: Vector3,
 	direction: Vector3,
 	velocity: Vector3 | number,
-	behavior: any
+	behavior: any,
+	eventModule: ModuleScript?
 )
-	BaseCast:Raycast(origin, direction, velocity, behavior)
+	BaseCast:Raycast(casterId, origin, direction, velocity, behavior, eventModule)
 end)
-
-actor:BindToMessage(
-	"SetFastCastEventsModule",
-	function(moduleScript: ModuleScript?)
-		BaseCast:SetFastCastEventsModule(moduleScript)
-	end
-)
 
 --[[actor:BindToMessage("Blockcast", function(
 	casterID : string,
@@ -54,40 +49,48 @@ actor:BindToMessage(
 end)]]
 
 actor:BindToMessage("Blockcast", function(
+	casterId: number,
 	origin: Vector3,
 	size: Vector3,
 	direction: Vector3,
 	velocity: Vector3 | number,
-	behavior: any
+	behavior: any,
+	eventModule: ModuleScript?
 )
-	BaseCast:Blockcast(origin, size, direction, velocity, behavior)
+	BaseCast:Blockcast(casterId, origin, size, direction, velocity, behavior, eventModule)
 end)
 
 actor:BindToMessage("Spherecast", function(
-	origin : Vector3,
-	radius : number,
-	direction : Vector3,
-	velocity : Vector3 | number,
-	behavior :any
+	casterId: number,
+	origin: Vector3,
+	radius: number,
+	direction: Vector3,
+	velocity: Vector3 | number,
+	behavior: any,
+	eventModule: ModuleScript?
 )
-	BaseCast:Spherecast(origin, radius, direction, velocity, behavior)
+	BaseCast:Spherecast(casterId, origin, radius, direction, velocity, behavior, eventModule)
 end)
 
 actor:BindToMessage("FireBatch", function(requests: { any })
 	for _, request in requests do
 		local kind = request[1]
 		if kind == 1 then
-			BaseCast:Raycast(request[2], request[3], request[4], request[5])
+			BaseCast:Raycast(request[2], request[3], request[4], request[5], request[6], request[7])
 		elseif kind == 2 then
-			BaseCast:Blockcast(request[2], request[3], request[4], request[5], request[6])
+			BaseCast:Blockcast(request[2], request[3], request[4], request[5], request[6], request[7], request[8])
 		elseif kind == 3 then
-			BaseCast:Spherecast(request[2], request[3], request[4], request[5], request[6])
+			BaseCast:Spherecast(request[2], request[3], request[4], request[5], request[6], request[7], request[8])
 		end
 	end
 end)
 
 actor:BindToMessage("SetMovementModeEnabled", function(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
 	BaseCast:SetMovementModeEnabled(enabled, mode)
+end)
+
+actor:BindToMessage("DestroyCaster", function(casterId: number)
+	BaseCast:DestroyCaster(casterId)
 end)
 
 -- CleanUp
