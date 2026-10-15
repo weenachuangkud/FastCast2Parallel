@@ -88,12 +88,12 @@ FastCast2 also does not automatically destroy or return cosmetic bullets when a 
 
  
 ```lua
-local Caster = FastCast2.new()
-Caster:Init(
+FastCast2.Init(
 	4,                 -- numWorkers
 	"BulkMoveTo",      -- movementMode
-	nil,               -- FastCastEventsModule (optional)
+	nil,               -- default FastCastEventsModule (optional)
 )
+local Caster = FastCast2.new()
  
 -- Subscribe to caster events
 Caster.Hit = function(cast, result, velocity, bullet)
@@ -174,7 +174,7 @@ end
 return module
 ```
 
-Register it on your parallel caster after `Init`:
+Set it per caster whenever needed:
 
 ```lua
 Caster:SetFastCastEventsModule(pathTo.FastCastEventsModule)
@@ -187,16 +187,15 @@ Caster:SetFastCastEventsModule(pathTo.FastCastEventsModule)
 Motor6D mode uses `Motor6D.Transform` for more performance instead of `BulkMoveTo`:
 
 ```lua
-local Caster = FastCast2.new()
-Caster:Init(4, "Motor6D") -- numWorkers, movementMode
+FastCast2.SetMovementModeEnabled(true, "Motor6D") -- shared movement mode
 ```
 
 All active casts automatically get a Motor6D connection on registration and disconnection on cleanup.
 You can switch modes at runtime:
 
 ```lua
-Caster:SetMovementModeEnabled(true, "Motor6D")   -- enable Motor6D
-Caster:SetMovementModeEnabled(true, "BulkMoveTo") -- switch back
+FastCast2.SetMovementModeEnabled(true, "Motor6D")   -- enable Motor6D
+FastCast2.SetMovementModeEnabled(true, "BulkMoveTo") -- switch back
 ```
 
 ### Simulation configuration
