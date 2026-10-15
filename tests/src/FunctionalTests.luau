@@ -178,6 +178,17 @@ return function()
 				expect.truthy(casterA.CasterId ~= casterB.CasterId, "casters shared the same numeric ID")
 
 				casterA:Destroy()
+				expect.truthy(Framework.waitFor(function()
+					return casterA.CasterId == nil
+				end, HIT_TIMEOUT), "destroying caster A did not finish")
+
+				casterBId = nil
+				casterB:RaycastFire(Vector3.zero, Vector3.zAxis, 50, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return casterBId ~= nil
+				end, HIT_TIMEOUT), "destroying caster A stopped the shared runtime")
+				expect.equal(casterBId, casterB.CasterId, "caster B stopped receiving its own events")
+
 				casterB:Destroy()
 			end)
 
