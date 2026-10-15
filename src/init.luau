@@ -543,6 +543,12 @@ function FastCast.Init(
 	FastCastEventsModule: ModuleScript?
 )
 	if RuntimeInitialized then
+		local initializedWorkerCount = ParallelDispatcher and #ParallelDispatcher.Threads or 0
+		if numWorkers ~= initializedWorkerCount then
+			warn("[FastCast2] FastCast.Init() already initialized with "
+				.. initializedWorkerCount .. " workers; ignoring the new worker count.")
+		end
+
 		if movementMode and movementMode ~= RuntimeMovementMode then
 			FastCast.SetMovementModeEnabled(true, movementMode)
 		end
