@@ -152,6 +152,35 @@ return function()
 
 			registerParallelCastTypes(test)
 
+			test("multiple casters share runtime and route events by CasterId", function(expect)
+				local casterAId = nil
+				local casterBId = nil
+				local casterA = createParallelCaster({
+					CastFire = function(cast)
+						casterAId = cast.CasterId
+					end,
+				})
+				local casterB = createParallelCaster({
+					CastFire = function(cast)
+						casterBId = cast.CasterId
+					end,
+				})
+
+				local behavior = FastCast.newBehavior()
+				casterA:RaycastFire(Vector3.zero, Vector3.yAxis, 50, behavior)
+				casterB:RaycastFire(Vector3.zero, Vector3.xAxis, 50, behavior)
+
+				expect.truthy(Framework.waitFor(function()
+					return casterAId ~= nil and casterBId ~= nil
+				end, HIT_TIMEOUT), "CastFire events were not routed to both casters")
+				expect.equal(casterAId, casterA.CasterId, "caster A received another caster's event")
+				expect.equal(casterBId, casterB.CasterId, "caster B received another caster's event")
+				expect.truthy(casterA.CasterId ~= casterB.CasterId, "casters shared the same numeric ID")
+
+				casterA:Destroy()
+				casterB:Destroy()
+			end)
+
 			test("movement mode can be switched", function(expect)
 				local caster = createParallelCaster()
 				caster:SetMovementModeEnabled(true, "Motor6D")
