@@ -93,11 +93,19 @@ local function fire(caster: any, castType: string, origin: Vector3, direction: V
 end
 
 local function createCaster(config: any, activeCasts: { any }): any
+	FastCast.Init(config.parallelWorkers, "BulkMoveTo")
+
 	local caster = FastCast.new()
-	caster:Init(config.parallelWorkers, "BulkMoveTo")
 	caster.CastFire = function(cast: any)
 		table.insert(activeCasts, cast)
 	end
+	caster.CastTerminating = function(cast: any)
+		local index = table.find(activeCasts, cast)
+		if index then
+			table.remove(activeCasts, index)
+		end
+	end
+
 	return caster
 end
 
@@ -125,8 +133,8 @@ local function runCase(castType: string, caster: any, activeCasts: { any }, conf
 
 	for index = #activeCasts, 1, -1 do
 		FastCast:TerminateCast(activeCasts[index])
-		activeCasts[index] = nil
 	end
+	table.clear(activeCasts)
 
 	local cleanupSeconds = os.clock() - cleanupStarted
 
@@ -176,6 +184,8 @@ function Benchmarks.run(overrides: any?): { any }
 	behavior.MaxDistance = 1e9
 	behavior.Acceleration = Vector3.zero
 	behavior.AutoIgnoreContainer = true
+	behavior.FastCastEventsConfig.UseCastFire = true
+	behavior.FastCastEventsConfig.UseCastTerminating = true
 	config.behavior = behavior
 
 	local results = {}
