@@ -262,6 +262,43 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("HighFidelity Always terminates when MaxDistance is reached", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxDistance = 15
+				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelitySegmentSize = 1
+				behavior.FastCastEventsConfig.UseCastTerminating = true
+
+				local hitCount = 0
+				local terminationCount = 0
+				local caster = createParallelCaster({
+					Hit = function()
+						hitCount += 1
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminationCount > 0
+					end, HIT_TIMEOUT),
+					"high-fidelity cast did not terminate at MaxDistance"
+				)
+
+				task.wait(0.1)
+				expect.equal(hitCount, 0, "MaxDistance termination incorrectly reported a hit")
+				expect.equal(terminationCount, 1, "MaxDistance termination fired more than once")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("SetFastCastEventsModule forwards module events", function(expect)
 				local arena = createArena()
 				createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
