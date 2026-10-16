@@ -253,7 +253,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full guide and [`CODE_OF_CONDUC
 
 ## Benchmarks
 
-FastCast2Parallel includes repeatable client and server benchmarks for raycasts, blockcasts, and spherecasts. They measure parallel execution using creation/cleanup throughput and simulation frame-time percentiles. See the [benchmark guide](benchmarks/README.md) for controls and the ready-to-sync Rojo project.
+FastCast2Parallel includes repeatable client and server benchmarks for raycasts, blockcasts, and spherecasts. They measure parallel execution using creation/cleanup throughput and simulation frame-time percentiles. Set the worker count before starting a play session. See the [benchmark guide](benchmarks/README.md) for controls and the ready-to-sync Rojo project.
 
 ## Tests
 
