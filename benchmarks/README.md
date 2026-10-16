@@ -6,7 +6,9 @@ Interactive benchmarking tools for FastCast2Parallel with real-time parameter tu
 
 **Type**: LocalScript (runs in StarterPlayerScripts or ReplicatedFirst)
 
-Fires projectiles and tracks FPS using keyboard controls. Measures parallel casting only.
+Fires projectiles and tracks frame-time statistics using keyboard controls. Measures parallel casting only.
+
+The worker count is fixed when `FastCast.Init` first initializes the runtime. Set `Config.NumWorkers` before pressing Play; rebuilding a caster in-session does not resize the existing worker pool.
 
 ### Controls
 
@@ -22,12 +24,9 @@ Fires projectiles and tracks FPS using keyboard controls. Measures parallel cast
 | X | Cycle HighFidelityBehavior (Default > Automatic > Always) |
 | > | Increase HighFidelitySegmentSize by 0.05 |
 | < | Decrease HighFidelitySegmentSize by 0.05 (floor 0.05) |
-| [ | Decrement numWorkers (floor 2, parallel only) |
-| ] | Increment numWorkers (parallel only) |
 | I | Show benchmark info |
 | H | Show controls |
 
-> Note: `[` decrements and `]` increments (bigger key = more workers).
 
 ### Settings
 
@@ -35,7 +34,7 @@ Edit at the top of the file:
 
 ```lua
 local Config = {
-    NumWorkers = 4,           -- number of VM workers (parallel only)
+    NumWorkers = 4,           -- number of VM workers; set before starting Play
     ProjectileAmount = 500,   -- projectiles per benchmark run
     CastType = "Raycast",     -- Raycast, Blockcast, or Spherecast
     Instanced = true,         -- use cosmetic bullet instances
@@ -69,8 +68,6 @@ Type the letter in chat:
 | x | Cycle HighFidelityBehavior |
 | > | Increase HighFidelitySegmentSize by 0.05 |
 | < | Decrease HighFidelitySegmentSize by 0.05 |
-| [ | Decrement numWorkers (floor 2) |
-| ] | Increment numWorkers |
 | i | Show benchmark info |
 | h | Show commands |
 
@@ -80,7 +77,7 @@ Edit at the top of the file:
 
 ```lua
 local Config = {
-    NumWorkers = 4,
+    NumWorkers = 4, -- Set before starting Play; restart to compare worker counts.
     Instanced = false,
     MovementMode = "BulkMoveTo",
     ProjectileAmount = 500,
@@ -132,7 +129,7 @@ Throughput: xx.xx projectiles/s
 
 The benchmark project mounts the FastCast2Parallel package as FastCast2 in `ReplicatedStorage`, the client benchmark in `ReplicatedFirst`, and the server benchmark in `ServerScriptService`. You can also insert either script manually in those locations if you do not use Rojo.
 
-For useful comparisons, change one setting at a time and run each configuration several times. In particular, compare all three cast types across worker counts with visualization disabled; Studio rendering, open windows, and plugins can otherwise add significant noise.
+For useful comparisons, change one setting at a time and run each configuration several times. Set `NumWorkers` before starting each play session to compare worker counts, and compare all three cast types with visualization disabled; Studio rendering, open windows, and plugins can otherwise add significant noise.
 
 ## Automated suite
 
