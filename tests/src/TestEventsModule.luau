@@ -24,4 +24,21 @@ return {
 	CanPierce = function()
 		return false
 	end,
+	OnStep = function(cast, _deltaTime)
+		-- Test-only hook used to prove OnStep runs before the worker's movement.
+		local userData = cast.UserData
+		if not userData
+			or typeof(userData.OnStepVelocity) ~= "Vector3"
+			or userData.OnStepApplied
+		then
+			return
+		end
+
+		userData.OnStepApplied = true
+		local trajectory = cast.StateInfo.Trajectory
+		trajectory.Origin = cast.CFrame.Position
+		trajectory.InitialVelocity = userData.OnStepVelocity
+		trajectory.Acceleration = Vector3.zero
+		trajectory.StartTime = cast.StateInfo.TotalRuntime
+	end,
 }
