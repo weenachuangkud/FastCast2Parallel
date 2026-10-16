@@ -85,6 +85,7 @@ export type OnPiercedFunction = TypeDef.OnPiercedFunction
 export type OnLengthChangedFunction = TypeDef.OnLengthChangedFunction
 export type OnCastTerminatingFunction = TypeDef.OnCastTerminatingFunction
 export type OnCastFireFunction = TypeDef.OnCastFireFunction
+export type OnStepFunction = TypeDef.OnStepFunction
 
 export type VisualizeCastSettings = TypeDef.VisualizeCastSettings
 
