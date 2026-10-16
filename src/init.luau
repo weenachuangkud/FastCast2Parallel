@@ -510,6 +510,11 @@ local function FlushFires()
 		if not batch then
 			batch = {}
 			FireBatches[worker] = batch
+		end
+
+		-- Batches are reused across frames, so register each non-empty batch
+		-- for this flush, not only when its backing table is first created.
+		if #batch == 0 then
 			usedCount += 1
 			FireUsed[usedCount] = worker
 		end
