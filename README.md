@@ -251,7 +251,7 @@ FastCast2:ResumeCast(cast)
 FastCast2:TerminateCast(cast)
 ```
 
-> **Tip**: In parallel mode, call `Caster:SyncChangesToCast(cast)` after modifying to push changes into the worker VM.
+> **Tip**: In parallel mode, call `Caster:SyncChangesToCast(cast)` after modifying a cast. Trajectory helper changes are applied against the worker's current position and simulation time, so an older `CastFire` reference won't rewind the cast's runtime or accumulated distance. Worker-side `OnStep` remains configured through `FastCastEventsModuleConfig.UseOnStep`.
 
 ### -> Get started with the [FastCast2 documentation](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference)
 
