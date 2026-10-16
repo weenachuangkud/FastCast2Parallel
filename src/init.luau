@@ -965,8 +965,12 @@ Synchronize new changes to the ActiveCast.
 ]=]
 function FastCastParallel:SyncChangesToCast(cast: vaildcast)
 	local syncChange: BindableEvent = (cast.Caster :: any).SyncChange
+	local cancelHighResCast = cast.StateInfo.CancelHighResCast
 
-	syncChange:Fire(cast)
+	-- Send the high-fidelity cancellation as a separate value so the worker
+	-- can apply it to its simulation cache. This field is a one-shot request.
+	cast.StateInfo.CancelHighResCast = false
+	syncChange:Fire(cast, cancelHighResCast)
 end
 
 --[=[
