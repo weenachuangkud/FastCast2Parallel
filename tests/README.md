@@ -48,8 +48,10 @@ see [the hot-path runner](hotpaths/README.md) (`npm run test:hotpaths`).
   (`SetFastCastEventsModule`, `SyncChangesToCast`).
 - **Benchmarks** (`tests/src/Benchmarks.luau`) run a fixed three-case matrix of
   Parallel x Raycast/Blockcast/Spherecast, reporting creation and
-  cleanup cost plus simulation frame-time percentiles. Adjust projectile count,
-  sample duration, and worker count in `Benchmarks.DefaultConfig`.
+  cleanup cost plus simulation frame-time percentiles. Adjust projectile count and
+  sample duration in `Benchmarks.DefaultConfig`. The automated suite shares the
+  worker pool initialized by the functional tests (2 workers by default), so a
+  different worker count must be applied to both initializations.
 
 > **Note:** "Avg frame"/"P95"/"P99" are Heartbeat intervals, so they are
 > bounded by Studio's frame rate (about `16.7 ms` at the default 60 FPS cap).
