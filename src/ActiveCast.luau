@@ -52,6 +52,8 @@ function ActiveCast.createCastData(
 		Caster = BaseCast,
 		StateInfo = {
 			TotalRuntime = 0,
+			MaxLifetime = behavior.MaxLifetime,
+			IsPaused = false,
 			DistanceCovered = 0,
 			HighFidelitySegmentSize = behavior.HighFidelitySegmentSize,
 			HighFidelityBehavior = behavior.HighFidelityBehavior,
@@ -101,6 +103,7 @@ function ActiveCast.createCastData(
 			UsePierced = behavior.FastCastEventsModuleConfig.UsePierced,
 			UseCastTerminating = behavior.FastCastEventsModuleConfig.UseCastTerminating,
 			UseCanPierce = behavior.FastCastEventsModuleConfig.UseCanPierce,
+			UseOnStep = behavior.FastCastEventsModuleConfig.UseOnStep,
 		}
 	end
 
