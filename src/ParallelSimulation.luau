@@ -1551,6 +1551,18 @@ local function SetMovementModeEnabled(
 )
 	local oldMode = CurrentMovementMode
 
+	-- BulkMoveTo buffers retain references to their previous parts. Release
+	-- them when this mode is left or disabled so finished cosmetics aren't
+	-- kept alive just because the simulator switched to Motor6D.
+	if oldMode == "BulkMoveTo"
+		and (mode ~= "BulkMoveTo" or not enabled)
+	then
+		table.clear(bulkParts)
+		table.clear(bulkCframes)
+		bulkCount = 0
+		previousBulkCount = 0
+	end
+
 	CurrentMovementMode = mode
 	MovementEnabled = enabled
 
@@ -1693,6 +1705,12 @@ end
 
 function ParallelSimulation.Unregister(castID: number)
 	ParallelSimulation_Unregister(castID)
+end
+
+function ParallelSimulation.CancelHighResCast(castID: number)
+	if casts_CancelHighResCast[castID] ~= nil then
+		casts_CancelHighResCast[castID] = true
+	end
 end
 
 function ParallelSimulation.SetMovementModeEnabled(
