@@ -89,8 +89,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 	SyncChangesConnection = SyncChanges.Event:Connect(function(
 		cast: TypeDef.ActiveCastData,
 		cancelHighResCast: boolean?,
-		stateOnly: boolean?,
-		trajectoryChanges: { any }?
+		stateOnly: boolean?
 	)
 		local ID = cast.ID
 		local TargetCast = self.Actives[ID]
@@ -103,39 +102,20 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				end
 			else
 				for i, v in cast do
-					-- CFrame, runtime, distance, pause state, and trajectory are
-					-- authoritative on the worker. Do not replay stale main-thread
-					-- snapshots over them.
-					if i == "CFrame" then
-						continue
-					elseif i == "StateInfo" and type(v) == "table" and type(TargetCast[i]) == "table" then
+					if i == "StateInfo" and type(v) == "table" and type(TargetCast[i]) == "table" then
 						for k, v2 in v do
-							if k == "TotalRuntime"
-								or k == "DistanceCovered"
-							or k == "IsPaused"
-							or k == "IsActivelySimulatingPierce"
-							or k == "IsActivelyResimulating"
-							or k == "CancelHighResCast"
-							or k == "Trajectory"
-						then
-								continue
+							if k == "Trajectory" and type(v2) == "table" and type(TargetCast[i][k]) == "table" then
+								for tk, tv in v2 do
+									TargetCast[i][k][tk] = tv
+								end
+							else
+								TargetCast[i][k] = v2
 							end
-							TargetCast.StateInfo[k] = v2
-						end
-					elseif i == "RayInfo" and type(v) == "table" and type(TargetCast.RayInfo) == "table" then
-						for k, v2 in v do
-							TargetCast.RayInfo[k] = v2
 						end
 					else
 						TargetCast[i] = v
 					end
 				end
-			end
-
-			ParallelSimulation.SyncCastUserData(ID, TargetCast.UserData)
-
-			if trajectoryChanges and #trajectoryChanges > 0 then
-				ParallelSimulation.ApplyTrajectoryChanges(ID, TargetCast, trajectoryChanges)
 			end
 
 			if cancelHighResCast then
