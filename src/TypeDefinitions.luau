@@ -32,6 +32,9 @@ type vaildcast = ActiveCastData | ActiveBlockcastData | ActiveSpherecastData
 ]=]
 export type FastCastEventsModule = ModuleScript
 
+-- Runs synchronously on the worker before each simulation update for a cast.
+export type OnStepFunction = (cast: vaildcast, deltaTime: number) -> ()
+
 --[=[
 	@type FastCastEvents { CanPierce: CanPierceFunction, Hit: OnHitFunction, Pierced: OnPiercedFunction, LengthChanged: OnLengthChangedFunction, CastTerminating: OnCastTerminatingFunction, CastFire: OnCastFireFunction }
 	@within TypeDefinitions
@@ -45,7 +48,8 @@ export type FastCastEvents = {
 	Pierced: OnPiercedFunction,
 	LengthChanged: OnLengthChangedFunction,
 	CastTerminating: OnCastTerminatingFunction,
-	CastFire: OnCastFireFunction
+	CastFire: OnCastFireFunction,
+	OnStep: OnStepFunction?
 }
 
 --[=[
@@ -236,7 +240,8 @@ export type FastCastEventsModuleConfig = {
 	UsePierced: boolean,
 	UseCastTerminating: boolean,
 	UseCanPierce: boolean,
-	UseCastFire: boolean
+	UseCastFire: boolean,
+	UseOnStep: boolean
 }
 
 --[=[
@@ -263,6 +268,7 @@ export type FastCastEventsConfig = {
 export type FastCastBehavior = {
 	RaycastParams: RaycastParams?,
 	MaxDistance: number,
+	MaxLifetime: number?,
 	Acceleration: Vector3,
 	HighFidelityBehavior: number,
 	HighFidelitySegmentSize: number,
@@ -304,6 +310,8 @@ export type CastStateInfo = {
 	HighFidelityBehavior: number,
 	HighFidelitySegmentSize: number,
 	TotalRuntime: number,
+	MaxLifetime: number?,
+	IsPaused: boolean,
 	DistanceCovered: number,
 	IsActivelySimulatingPierce: boolean,
 	IsActivelyResimulating: boolean,

@@ -84,6 +84,8 @@ FastCast2 no longer includes a built-in ObjectCache. Manage cosmetic bullet inst
 
 FastCast2 also does not automatically destroy or return cosmetic bullets when a cast terminates, so the caller controls their lifecycle.
 
+Set `behavior.MaxLifetime` to limit cast lifetime. Lifetime uses simulation time, so paused casts do not age.
+
 ### Parallel simulation
 
  
@@ -147,6 +149,12 @@ end
 
 module.CastFire = function()
 	print("CastFire!")
+end
+
+-- Optional: runs inside the worker before each simulation step for this cast.
+-- Enable with behavior.FastCastEventsModuleConfig.UseOnStep = true.
+module.OnStep = function(cast, deltaTime)
+	-- Inspect or update cast.StateInfo.Trajectory here.
 end
 
 module.CastTerminating = function()
@@ -225,10 +233,19 @@ FastCast2:SetPositionCast(cast, Vector3.new(0, 50, 0))
 FastCast2:SetVelocityCast(cast, Vector3.new(0, 100, 0))
 FastCast2:SetAccelerationCast(cast, Vector3.new(0, -workspace.Gravity, 0))
 
+-- Shorter aliases for velocity and acceleration
+FastCast2:SetVelocity(cast, Vector3.new(0, 100, 0))
+FastCast2:SetAcceleration(cast, Vector3.new(0, -workspace.Gravity, 0))
+
 -- Relative changes
 FastCast2:AddPositionCast(cast, Vector3.new(0, 10, 0))
 FastCast2:AddVelocityCast(cast, Vector3.new(0, 20, 0))
 FastCast2:AddAccelerationCast(cast, Vector3.new(0, -50, 0))
+
+-- Synchronize trajectory edits with the worker. Pause/resume do this automatically.
+Caster:SyncChangesToCast(cast)
+FastCast2:PauseCast(cast)
+FastCast2:ResumeCast(cast)
 
 -- Terminate a cast early (fires CastTerminating and cleans up)
 FastCast2:TerminateCast(cast)

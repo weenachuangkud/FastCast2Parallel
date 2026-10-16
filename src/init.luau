@@ -85,6 +85,7 @@ export type OnPiercedFunction = TypeDef.OnPiercedFunction
 export type OnLengthChangedFunction = TypeDef.OnLengthChangedFunction
 export type OnCastTerminatingFunction = TypeDef.OnCastTerminatingFunction
 export type OnCastFireFunction = TypeDef.OnCastFireFunction
+export type OnStepFunction = TypeDef.OnStepFunction
 
 export type VisualizeCastSettings = TypeDef.VisualizeCastSettings
 
@@ -952,6 +953,63 @@ Add acceleration to an ActiveCast with the specified Vector3.
 ]=]
 function FastCast:AddAccelerationCast(cast: vaildcast, acceleration: Vector3)
 	FastCast:SetAccelerationCast(cast, FastCast:GetAccelerationCast(cast) + acceleration)
+end
+
+--[=[
+	Sets a cast's velocity while preserving its current position and runtime.
+	In parallel mode, call Caster:SyncChangesToCast(cast) after changing trajectory.
+	@method SetVelocity
+	@within FastCast
+]=]
+function FastCast:SetVelocity(cast: vaildcast, velocity: Vector3)
+	FastCast:SetVelocityCast(cast, velocity)
+end
+
+--[=[
+	Sets a cast's acceleration while preserving its current position and runtime.
+	In parallel mode, call Caster:SyncChangesToCast(cast) after changing trajectory.
+	@method SetAcceleration
+	@within FastCast
+]=]
+function FastCast:SetAcceleration(cast: vaildcast, acceleration: Vector3)
+	FastCast:SetAccelerationCast(cast, acceleration)
+end
+
+-- Pause/resume synchronizes only the pause flag, avoiding stale snapshot writes.
+local function SyncPausedState(cast: any)
+	local baseCast = cast.Caster
+	local syncChange = baseCast and baseCast.SyncChange
+	if syncChange then
+		syncChange:Fire(cast, false, true)
+	end
+end
+
+--[=[
+	Pauses an active parallel cast without advancing simulation time.
+	@method PauseCast
+	@within FastCast
+]=]
+function FastCast:PauseCast(cast: any)
+	if not cast or not cast.StateInfo or cast._Destroying or cast._TerminationQueued then
+		return
+	end
+
+	cast.StateInfo.IsPaused = true
+	SyncPausedState(cast)
+end
+
+--[=[
+	Resumes a cast paused with PauseCast.
+	@method ResumeCast
+	@within FastCast
+]=]
+function FastCast:ResumeCast(cast: any)
+	if not cast or not cast.StateInfo or cast._Destroying or cast._TerminationQueued then
+		return
+	end
+
+	cast.StateInfo.IsPaused = false
+	SyncPausedState(cast)
 end
 
 --[=[
