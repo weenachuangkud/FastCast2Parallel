@@ -523,7 +523,9 @@ local function FlushFires()
 		local worker = FireUsed[i]
 		local batch = FireBatches[worker]
 
-		threads[worker]:SendMessage("FireBatch", batch)
+		-- Send a snapshot because the worker consumes the message asynchronously.
+		-- Do not let reuse of the pooled batch table mutate an in-flight request.
+		threads[worker]:SendMessage("FireBatch", table.clone(batch))
 		table.clear(batch)
 		FireUsed[i] = nil
 	end
