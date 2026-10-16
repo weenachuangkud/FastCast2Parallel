@@ -126,6 +126,7 @@ local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
 -- Precomputed at registration so the hot path avoids config lookups and,
 -- more importantly, avoids queueing events nobody listens to.
 local casts_WantLengthChanged = {} :: { [number]: boolean }
+local casts_WantOnStep = {} :: { [number]: boolean }
 local casts_HasCosmetic = {} :: { [number]: boolean }
 local castsWithCosmetics: number = 0
 
@@ -1447,6 +1448,12 @@ function ParallelSimulation_Register(cast: any)
 			and moduleEvents.LengthChanged ~= nil
 		)
 
+	casts_WantOnStep[id] =
+		moduleConfig ~= nil
+		and moduleConfig.UseOnStep == true
+		and moduleEvents ~= nil
+		and type(moduleEvents.OnStep) == "function"
+
 	local hasCosmetic = cast.RayInfo.CosmeticBulletObject ~= nil
 	casts_HasCosmetic[id] = hasCosmetic
 	if hasCosmetic then
@@ -1498,6 +1505,7 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_FastCastEvents[castID] = nil
 
 	casts_WantLengthChanged[castID] = nil
+	casts_WantOnStep[castID] = nil
 	if casts_HasCosmetic[castID] then
 		castsWithCosmetics -= 1
 	end
@@ -1615,12 +1623,45 @@ local function UpdateCasts(delta: number)
 			continue
 		end
 
-		if not casts_Trajectory[id] then
+		if not cast or not casts_Trajectory[id] then
+			continue
+		end
+
+		-- Lifetime is simulation time, so paused casts do not age.
+		-- Check at the update boundary before OnStep or movement.
+		local maxLifetime = cast.StateInfo.MaxLifetime
+		if maxLifetime ~= nil and casts_TotalRunTime[id] >= maxLifetime then
+			QueueEvent(id, EVT_CAST_TERMINATING)
+			continue
+		end
+
+		if cast.StateInfo.IsPaused then
 			continue
 		end
 
 		if casts_HighFidelitySegmentSize[id] <= 0 then
 			casts_HighFidelitySegmentSize[id] = 0.1
+		end
+
+		-- OnStep must run on the worker so it can modify the cast before movement.
+		-- It is opt-in to keep the default simulation path lean.
+		if casts_WantOnStep[id] then
+			local events = casts_FastCastEvents[id]
+			local onStep = events and events.OnStep
+			if type(onStep) == "function" then
+				onStep(cast, delta)
+				casts_Trajectory[id] = cast.StateInfo.Trajectory
+				if cast.StateInfo.CancelHighResCast then
+					if casts_IsActivelyResimulating[id] then
+						casts_CancelHighResCast[id] = true
+					end
+					cast.StateInfo.CancelHighResCast = false
+				end
+			end
+		end
+
+		if not ActivesRef[id] or cast._Destroying or cast.StateInfo.IsPaused then
+			continue
 		end
 
 		local behavior = casts_HighFidelityBehavior[id]
