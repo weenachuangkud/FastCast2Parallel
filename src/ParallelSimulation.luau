@@ -1748,6 +1748,70 @@ function ParallelSimulation.Unregister(castID: number)
 	ParallelSimulation_Unregister(castID)
 end
 
+-- Apply trajectory operations using the worker's authoritative runtime and
+-- trajectory. Main-thread cast snapshots can be several frames old.
+function ParallelSimulation.ApplyTrajectoryChanges(castID: number, cast: any, changes: { any })
+	local trajectory = casts_Trajectory[castID]
+	local runtime = casts_TotalRunTime[castID]
+	if not trajectory or runtime == nil then
+		return
+	end
+
+	for _, change in changes do
+		local elapsed = runtime - trajectory.StartTime
+		local currentPosition = GetPositionAtTime(
+			elapsed,
+			trajectory.Origin,
+			trajectory.InitialVelocity,
+			trajectory.Acceleration
+		)
+		local currentVelocity = GetVelocityAtTime(
+			elapsed,
+			trajectory.InitialVelocity,
+			trajectory.Acceleration
+		)
+
+		local position = currentPosition
+		local velocity = currentVelocity
+		local acceleration = trajectory.Acceleration
+		local operation = change.Operation
+		local value = change.Value
+
+		if operation == "SetPosition" then
+			position = value
+		elseif operation == "AddPosition" then
+			position += value
+		elseif operation == "SetVelocity" then
+			velocity = value
+		elseif operation == "AddVelocity" then
+			velocity += value
+		elseif operation == "SetAcceleration" then
+			acceleration = value
+		elseif operation == "AddAcceleration" then
+			acceleration += value
+		end
+
+		trajectory.Origin = position
+		trajectory.InitialVelocity = velocity
+		trajectory.Acceleration = acceleration
+		trajectory.StartTime = runtime
+
+		if operation == "SetPosition" or operation == "AddPosition" then
+			local cframe = CFrame.new(position)
+			casts_CFrame[castID] = cframe
+			cast.CFrame = cframe
+		end
+	end
+
+	cast.StateInfo.Trajectory = trajectory
+end
+
+function ParallelSimulation.SyncCastUserData(castID: number, userData: any)
+	if casts_TotalRunTime[castID] ~= nil then
+		casts_UserData[castID] = userData
+	end
+end
+
 function ParallelSimulation.CancelHighResCast(castID: number)
 	if casts_CancelHighResCast[castID] ~= nil then
 		casts_CancelHighResCast[castID] = true
