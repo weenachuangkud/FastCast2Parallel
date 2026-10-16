@@ -152,6 +152,52 @@ return function()
 
 			registerParallelCastTypes(test)
 
+			test("one caster can fire again after its first shot terminates", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+
+				local castFireCount = 0
+				local hitCount = 0
+				local caster = createParallelCaster({
+					CastFire = function()
+						castFireCount += 1
+					end,
+					Hit = function(_, result)
+						if result.Instance == wall then
+							hitCount += 1
+						end
+					end,
+				})
+
+				-- Let the first shot finish before queueing more shots on the same caster.
+				caster:RaycastFire(Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return castFireCount == 1 and hitCount == 1
+					end, HIT_TIMEOUT),
+					"the first shot did not fire and hit"
+				)
+
+				-- Fire repeatedly after a completed cast, including several requests in one frame.
+				for _ = 2, 5 do
+					caster:RaycastFire(Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				end
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return castFireCount == 5 and hitCount == 5
+					end, HIT_TIMEOUT),
+					"subsequent shots were not all dispatched and hit the wall"
+				)
+				expect.equal(castFireCount, 5, "the same caster did not dispatch all five shots")
+				expect.equal(hitCount, 5, "the same caster did not register all five hits")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("multiple casters share runtime and route events by CasterId", function(expect)
 				local casterAId = nil
 				local casterBId = nil
