@@ -86,7 +86,10 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 	SyncChanges.Parent = Actor
 	self.SyncChange = SyncChanges
 
-	SyncChangesConnection = SyncChanges.Event:Connect(function(cast: TypeDef.ActiveCastData)
+	SyncChangesConnection = SyncChanges.Event:Connect(function(
+		cast: TypeDef.ActiveCastData,
+		cancelHighResCast: boolean?
+	)
 		local ID = cast.ID
 		local TargetCast = self.Actives[ID]
 		if TargetCast then
@@ -104,6 +107,10 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				else
 					TargetCast[i] = v
 				end
+			end
+
+			if cancelHighResCast then
+				ParallelSimulation.CancelHighResCast(ID)
 			end
 		end
 	end)
