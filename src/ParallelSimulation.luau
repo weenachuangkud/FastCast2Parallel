@@ -742,9 +742,19 @@ local function BulkMoveTo()
 		return
 	end
 
-	-- Keep the configured throttle while cosmetics are active. When no
-	-- cosmetics remain, still run once to clear stale array references.
-	if castsWithCosmetics > 0 and not ShouldUpdateCosmetics() then
+	-- Instanceless casts have nothing to move. Skip the O(active casts)
+	-- scan entirely, while still clearing any buffers left by the last cosmetic.
+	if castsWithCosmetics == 0 then
+		for i = 1, previousBulkCount do
+			bulkParts[i] = nil
+			bulkCframes[i] = nil
+		end
+		previousBulkCount = 0
+		bulkCount = 0
+		return
+	end
+
+	if not ShouldUpdateCosmetics() then
 		return
 	end
 
