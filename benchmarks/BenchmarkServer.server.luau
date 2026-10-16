@@ -17,8 +17,6 @@
 		x  - Cycle HighFidelityBehavior
 		>  - Increase HighFidelitySegmentSize
 		<  - Decrease HighFidelitySegmentSize
-		]  - Increase workers
-		[  - Decrease workers
 		i  - Show benchmark information
 		h  - Show help
 ]]
@@ -50,15 +48,11 @@ local Config = {
 
 	ProjectileStep = 500,
 
-	WorkerStep = 1,
-	MinWorkers = 2,
-
 	SegmentSizeStep = 0.05,
 	MinSegmentSize = 0.05,
 }
 
 --// Constants
-local NUM_WORKERS_CHANGE_COOLDOWN = 4.5
 local BENCHMARK_COOLDOWN = 2.5
 
 --// Modules
@@ -119,6 +113,8 @@ CastBehavior.CosmeticBulletTemplate =
 	Config.Instanced and ProjectileTemplate or nil
 
 CastBehavior.VisualizeCasts = Config.VisualizeCasts
+CastBehavior.FastCastEventsConfig.UseCastFire = true
+CastBehavior.FastCastEventsConfig.UseCastTerminating = true
 
 --// State
 
@@ -126,7 +122,6 @@ local Caster
 local ActiveCasts = {}
 
 local IsBenchmarking = false
-local IsReconfiguring = false
 
 --// Frame Statistics
 
@@ -167,6 +162,23 @@ local function onCastFire(cast)
 	ActiveCasts[#ActiveCasts + 1] = cast
 end
 
+local function onCastTerminating(cast)
+	local cosmetic = cast.RayInfo.CosmeticBulletObject
+
+	if cosmetic and cosmetic.Parent then
+		cosmetic:Destroy()
+	end
+
+	if ActiveCasts[#ActiveCasts] == cast then
+		ActiveCasts[#ActiveCasts] = nil
+	else
+		local index = table.find(ActiveCasts, cast)
+		if index then
+			table.remove(ActiveCasts, index)
+		end
+	end
+end
+
 --// Caster Creation
 
 local function createCaster()
@@ -174,9 +186,10 @@ local function createCaster()
 		Config.NumWorkers,
 		Config.MovementMode
 	)
-	local caster = FastCast.new()
 
+	local caster = FastCast.new()
 	caster.CastFire = onCastFire
+	caster.CastTerminating = onCastTerminating
 
 	return caster
 end
@@ -190,8 +203,6 @@ local function terminateActiveCasts()
 		if cast then
 			FastCast:TerminateCast(cast)
 		end
-
-		ActiveCasts[i] = nil
 	end
 
 	table.clear(ActiveCasts)
@@ -337,14 +348,14 @@ local function fireProjectiles()
 	local random = Random.new(Config.RandomSeed)
 
 	for _ = 1, Config.ProjectileAmount do
-		task.spawn(fireProjectile, random)
+		fireProjectile(random)
 	end
 end
 
 --// Benchmark
 
 local function runBenchmark()
-	if IsBenchmarking or IsReconfiguring then
+	if IsBenchmarking then
 		return
 	end
 
@@ -391,6 +402,7 @@ local function runBenchmark()
 		--// Cleanup
 		printSection("CLEANUP")
 
+		local activeCount = #ActiveCasts
 		local cleanupStarted = os.clock()
 
 		terminateActiveCasts()
@@ -399,7 +411,7 @@ local function runBenchmark()
 
 		printOperationStats(
 			cleanupElapsed,
-			Config.ProjectileAmount
+			activeCount
 		)
 
 		-- Give FastCast2's parallel workers time to finish
@@ -551,35 +563,6 @@ end
 
 --// Worker Configuration
 
-local function changeWorkerCount(amount)
-	if IsBenchmarking or IsReconfiguring then
-		return
-	end
-
-	local newCount = math.max(
-		Config.MinWorkers,
-		Config.NumWorkers + amount
-	)
-
-	if newCount == Config.NumWorkers then
-		return
-	end
-
-	IsReconfiguring = true
-
-	Config.NumWorkers = newCount
-
-	rebuildCaster()
-
-	print(("numWorkers: %d"):format(
-		Config.NumWorkers
-		))
-
-	task.wait(NUM_WORKERS_CHANGE_COOLDOWN)
-
-	IsReconfiguring = false
-end
-
 --// Help
 
 local function showHelp()
@@ -597,8 +580,6 @@ local function showHelp()
 	print("x - Cycle HighFidelityBehavior")
 	print("> - Increase HighFidelitySegmentSize")
 	print("< - Decrease HighFidelitySegmentSize")
-	print("] - Increment numWorkers")
-	print("[ - Decrement numWorkers")
 	print("i - Show benchmark information")
 	print("h - Show this help")
 end
@@ -627,7 +608,7 @@ local Commands = {
 	end,
 
 	j = function()
-		if not IsBenchmarking and not IsReconfiguring then
+		if not IsBenchmarking then
 			toggleMovementMode()
 		end
 	end,
@@ -674,14 +655,6 @@ local Commands = {
 		end
 	end,
 
-	["["] = function()
-		changeWorkerCount(-Config.WorkerStep)
-	end,
-
-	["]"] = function()
-		changeWorkerCount(Config.WorkerStep)
-	end,
-
 	i = function()
 		if not IsBenchmarking then
 			printBenchmarkInfo()
@@ -701,7 +674,6 @@ local KeyNameToCommand = {
 	K = "k",
 	U = "u",
 	J = "j",
-	Y = "y",
 	V = "v",
 	X = "x",
 	R = "r",
@@ -710,8 +682,6 @@ local KeyNameToCommand = {
 
 	Period = ">",
 	Comma = "<",
-	LeftBracket = "[",
-	RightBracket = "]",
 }
 
 local function runCommand(command)
