@@ -88,24 +88,33 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 
 	SyncChangesConnection = SyncChanges.Event:Connect(function(
 		cast: TypeDef.ActiveCastData,
-		cancelHighResCast: boolean?
+		cancelHighResCast: boolean?,
+		stateOnly: boolean?
 	)
 		local ID = cast.ID
 		local TargetCast = self.Actives[ID]
 		if TargetCast then
-			for i, v in cast do
-				if i == "StateInfo" and type(v) == "table" and type(TargetCast[i]) == "table" then
-					for k, v2 in v do
-						if k == "Trajectory" and type(v2) == "table" and type(TargetCast[i][k]) == "table" then
-							for tk, tv in v2 do
-								TargetCast[i][k][tk] = tv
+			if stateOnly then
+				-- Pause/resume must not overwrite worker-owned runtime, distance,
+				-- trajectory, or UserData with an older event snapshot.
+				if TargetCast.StateInfo and cast.StateInfo then
+					TargetCast.StateInfo.IsPaused = cast.StateInfo.IsPaused
+				end
+			else
+				for i, v in cast do
+					if i == "StateInfo" and type(v) == "table" and type(TargetCast[i]) == "table" then
+						for k, v2 in v do
+							if k == "Trajectory" and type(v2) == "table" and type(TargetCast[i][k]) == "table" then
+								for tk, tv in v2 do
+									TargetCast[i][k][tk] = tv
+								end
+							else
+								TargetCast[i][k] = v2
 							end
-						else
-							TargetCast[i][k] = v2
 						end
+					else
+						TargetCast[i] = v
 					end
-				else
-					TargetCast[i] = v
 				end
 			end
 
