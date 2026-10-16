@@ -560,6 +560,41 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("SyncChangesToCast preserves worker-owned runtime and trajectory references", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local firedCast = nil
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						firedCast = cast
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 60, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return firedCast ~= nil
+				end, HIT_TIMEOUT), "parallel CastFire never ran")
+
+				local cast = firedCast :: any
+				local trajectory = cast.StateInfo.Trajectory
+				local totalRuntime = cast.StateInfo.TotalRuntime
+				local distanceCovered = cast.StateInfo.DistanceCovered
+
+				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -100))
+				caster:SyncChangesToCast(cast)
+				task.wait(0.1)
+
+				expect.equal(cast.StateInfo.Trajectory, trajectory, "trajectory table reference changed")
+				expect.equal(cast.StateInfo.TotalRuntime, totalRuntime, "sync overwrote worker-owned runtime")
+				expect.equal(cast.StateInfo.DistanceCovered, distanceCovered, "sync overwrote worker-owned distance")
+				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(0, 0, -100), 1e-3, "trajectory change was not applied")
+
+				FastCast:TerminateCast(cast)
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("SyncChangesToCast does not error", function(expect)
 				local arena = createArena()
 				local container = createContainer(arena)

@@ -52,6 +52,20 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 	table.clear(cast :: any)
 end
 
+-- Keep the worker's trajectory table because ParallelSimulation caches its reference.
+-- Only trajectory fields are synchronized by SyncChangesToCast; runtime and distance
+-- remain owned by the worker and must not be overwritten by a stale cast snapshot.
+local function SyncTrajectoryChanges(sourceState: any, targetState: any)
+	local sourceTrajectory = sourceState.Trajectory
+	local targetTrajectory = targetState.Trajectory
+
+	targetTrajectory.StartTime = sourceTrajectory.StartTime
+	targetTrajectory.EndTime = sourceTrajectory.EndTime
+	targetTrajectory.Origin = sourceTrajectory.Origin
+	targetTrajectory.InitialVelocity = sourceTrajectory.InitialVelocity
+	targetTrajectory.Acceleration = sourceTrajectory.Acceleration
+end
+
 local BaseCastInitialized = false
 local BaseCastInstance = nil
 function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
@@ -101,21 +115,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 					TargetCast.StateInfo.IsPaused = cast.StateInfo.IsPaused
 				end
 			else
-				for i, v in cast do
-					if i == "StateInfo" and type(v) == "table" and type(TargetCast[i]) == "table" then
-						for k, v2 in v do
-							if k == "Trajectory" and type(v2) == "table" and type(TargetCast[i][k]) == "table" then
-								for tk, tv in v2 do
-									TargetCast[i][k][tk] = tv
-								end
-							else
-								TargetCast[i][k] = v2
-							end
-						end
-					else
-						TargetCast[i] = v
-					end
-				end
+				SyncTrajectoryChanges(cast.StateInfo, TargetCast.StateInfo)
 			end
 
 			if cancelHighResCast then
