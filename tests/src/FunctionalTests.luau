@@ -299,6 +299,148 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("MaxLifetime expires casts at a simulation update boundary", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxLifetime = 0.1
+
+				local terminatedRuntime = nil
+				local caster = createParallelCaster({
+					CastTerminating = function(cast)
+						terminatedRuntime = cast.StateInfo.TotalRuntime
+					end,
+				})
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 10, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminatedRuntime ~= nil
+					end, HIT_TIMEOUT),
+					"cast did not terminate after MaxLifetime"
+				)
+				expect.truthy(
+					terminatedRuntime >= behavior.MaxLifetime,
+					"cast terminated before reaching MaxLifetime"
+				)
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("MaxLifetime zero terminates before the first movement update", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxLifetime = 0
+				behavior.FastCastEventsConfig.UseLengthChanged = true
+
+				local terminationCount = 0
+				local lengthChangedCount = 0
+				local caster = createParallelCaster({
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+					LengthChanged = function()
+						lengthChangedCount += 1
+					end,
+				})
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminationCount > 0
+					end, HIT_TIMEOUT),
+					"zero-lifetime cast did not terminate"
+				)
+				task.wait(0.1)
+				expect.equal(terminationCount, 1, "termination fired more than once")
+				expect.equal(lengthChangedCount, 0, "zero-lifetime cast moved before termination")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("PauseCast and ResumeCast freeze and resume worker simulation", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local firedCast = nil
+				local hitInstance = nil
+				local terminationCount = 0
+
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						firedCast = cast
+						FastCast:PauseCast(cast)
+					end,
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return firedCast ~= nil
+					end, HIT_TIMEOUT),
+					"CastFire did not provide an active cast"
+				)
+
+				task.wait(0.25)
+				expect.equal(hitInstance, nil, "paused cast continued to hit")
+				expect.equal(terminationCount, 0, "paused cast terminated while paused")
+
+				FastCast:ResumeCast(firedCast)
+				expect.truthy(
+					Framework.waitFor(function()
+						return hitInstance ~= nil
+					end, HIT_TIMEOUT),
+					"cast did not resume after ResumeCast"
+				)
+				expect.equal(hitInstance, wall, "resumed cast hit the wrong instance")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("worker OnStep runs before movement and can steer a cast", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.FastCastEventsModuleConfig.UseOnStep = true
+				behavior.UserData = {
+					OnStepVelocity = Vector3.new(0, 0, -120),
+				}
+
+				local hitInstance = nil
+				local caster = createParallelCaster({
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+				})
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return hitInstance ~= nil
+					end, HIT_TIMEOUT),
+					"worker OnStep did not steer the cast into the wall"
+				)
+				expect.equal(hitInstance, wall, "OnStep steered the cast to the wrong instance")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("SetFastCastEventsModule forwards module events", function(expect)
 				local arena = createArena()
 				createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
