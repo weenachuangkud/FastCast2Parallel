@@ -718,6 +718,7 @@ end
 local bulkParts: { Instance } = {}
 local bulkCframes: { CFrame } = {}
 local bulkCount: number = 0
+local previousBulkCount: number = 0
 local cosmeticFrame: number = 0
 
 -- Cosmetic parts can be pushed at a lower rate than the simulation. Moving
@@ -740,12 +741,9 @@ local function BulkMoveTo()
 		return
 	end
 
-	-- Nothing to move if no cast has a cosmetic part.
-	if castsWithCosmetics == 0 then
-		return
-	end
-
-	if not ShouldUpdateCosmetics() then
+	-- Keep the configured throttle while cosmetics are active. When no
+	-- cosmetics remain, still run once to clear stale array references.
+	if castsWithCosmetics > 0 and not ShouldUpdateCosmetics() then
 		return
 	end
 
@@ -761,6 +759,14 @@ local function BulkMoveTo()
 			bulkCframes[bulkCount] = casts_CFrame[id]
 		end
 	end
+
+	-- These arrays are reused. Remove entries that belonged to casts from
+	-- the previous update but were not collected this time.
+	for i = bulkCount + 1, previousBulkCount do
+		bulkParts[i] = nil
+		bulkCframes[i] = nil
+	end
+	previousBulkCount = bulkCount
 
 	if bulkCount > 0 then
 		workspace:BulkMoveTo(
@@ -1037,7 +1043,7 @@ end
 local function SimulateCast(
 	id: number,
 	delta: number
-)
+): boolean
 	if DebugLogging.Casting then
 		print("Casting for frame - SimulateCast")
 	end
@@ -1078,7 +1084,7 @@ local function SimulateCast(
 
 	if displacementMagnitude <= EPSILON then
 		casts_DistanceCovered[id] += displacementMagnitude
-		return
+		return false
 	end
 
 	local worldRoot = rayInfo.WorldRoot
@@ -1141,9 +1147,10 @@ local function SimulateCast(
 				EVT_CAST_TERMINATING,
 				castTerminatingfn
 			)
+			return true
 		end
 
-		return
+		return false
 	end
 
 	-- ------------------------------------------------------------------------
@@ -1151,7 +1158,7 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if result.Instance == rayInfo.CosmeticBulletObject then
-		return
+		return false
 	end
 
 	local canPierce, castTerminatingfn = GetEventCallbacks(id)
@@ -1173,7 +1180,7 @@ local function SimulateCast(
 			false
 		)
 
-		return
+		return false
 	end
 
 	-- ------------------------------------------------------------------------
@@ -1198,7 +1205,7 @@ local function SimulateCast(
 					.. "Consider increasing HighFidelitySegmentSize."
 			)
 
-			return
+			return true
 		end
 
 		local lastDelta = previousTime
@@ -1218,7 +1225,7 @@ local function SimulateCast(
 			velocity
 		)
 
-		return
+		return true
 	end
 
 	QueueHit(
@@ -1228,6 +1235,8 @@ local function SimulateCast(
 		false,
 		castTerminatingfn
 	)
+
+	return true
 end
 
 -- ============================================================================
@@ -1360,10 +1369,12 @@ local function SimulateAlwaysHighFidelity(
 			)
 		end
 
-		SimulateCast(
-			id,
-			timeIncrement
-		)
+		-- Do not keep advancing substeps after this frame has hit something
+		-- or reached MaxDistance; the termination event is processed later
+		-- when the worker flushes its queued events.
+		if SimulateCast(id, timeIncrement) then
+			break
+		end
 	end
 
 	casts_IsActivelyResimulating[id] = false
