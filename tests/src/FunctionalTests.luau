@@ -232,6 +232,12 @@ return function()
 				expect.near(FastCast:GetAccelerationCast(cast), Vector3.new(0, -15, 0), 1e-3, "acceleration was not updated")
 				expect.near(FastCast:GetPositionCast(cast), Vector3.new(6, 5, 5), 1e-3, "position was not updated")
 
+				FastCast:SetVelocity(cast, Vector3.new(1, 2, 3))
+				FastCast:SetAcceleration(cast, Vector3.new(4, 5, 6))
+				caster:SyncChangesToCast(cast)
+				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(1, 2, 3), 1e-3, "SetVelocity alias did not update velocity")
+				expect.near(FastCast:GetAccelerationCast(cast), Vector3.new(4, 5, 6), 1e-3, "SetAcceleration alias did not update acceleration")
+
 				FastCast:TerminateCast(cast)
 				caster:Destroy()
 				arena:Destroy()
