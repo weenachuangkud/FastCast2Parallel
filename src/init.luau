@@ -262,66 +262,6 @@ local RuntimeMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
 local DefaultFastCastEventsModule: ModuleScript? = nil
 local DestroyingCasters: { [number]: { caster: any, remaining: number } } = {}
 
--- Worker cast snapshots delivered to the main thread are not authoritative for
--- runtime, distance, or the active trajectory. Keep a local baseline so direct
--- trajectory edits can be translated into operations rather than stale snapshots.
-local CastTrajectoryBaselines: { [any]: any } = setmetatable({}, { __mode = "k" })
-local PendingTrajectoryChanges: { [any]: { any } } = setmetatable({}, { __mode = "k" })
-
-local function CaptureTrajectoryBaseline(cast: any)
-	local trajectory = cast and cast.StateInfo and cast.StateInfo.Trajectory
-	if not trajectory then
-		return
-	end
-
-	CastTrajectoryBaselines[cast] = {
-		Origin = trajectory.Origin,
-		InitialVelocity = trajectory.InitialVelocity,
-		Acceleration = trajectory.Acceleration,
-		StartTime = trajectory.StartTime,
-		EndTime = trajectory.EndTime,
-	}
-end
-
-local function GetManualTrajectoryChanges(cast: any): { any }?
-	local baseline = CastTrajectoryBaselines[cast]
-	local trajectory = cast and cast.StateInfo and cast.StateInfo.Trajectory
-	if not baseline or not trajectory then
-		return nil
-	end
-
-	local changes = {}
-	if trajectory.Origin ~= baseline.Origin then
-		table.insert(changes, { Operation = "SetPosition", Value = trajectory.Origin })
-	end
-	if trajectory.InitialVelocity ~= baseline.InitialVelocity then
-		table.insert(changes, { Operation = "SetVelocity", Value = trajectory.InitialVelocity })
-	end
-	if trajectory.Acceleration ~= baseline.Acceleration then
-		table.insert(changes, { Operation = "SetAcceleration", Value = trajectory.Acceleration })
-	end
-
-	return if #changes > 0 then changes else nil
-end
-
-local function QueueTrajectoryChange(cast: any, operation: string, value: Vector3)
-	local changes = PendingTrajectoryChanges[cast]
-	if not changes then
-		changes = {}
-		PendingTrajectoryChanges[cast] = changes
-	end
-
-	-- Preserve direct trajectory edits made before this helper call.
-	local manualChanges = GetManualTrajectoryChanges(cast)
-	if manualChanges then
-		for _, change in manualChanges do
-			table.insert(changes, change)
-		end
-	end
-
-	table.insert(changes, { Operation = operation, Value = value })
-end
-
 -- Demux worker event batches by numeric CasterId instead of binding the
 -- shared worker pool to a single caster.
 local function DispatchOutputBatch(batch)
@@ -330,10 +270,6 @@ local function DispatchOutputBatch(batch)
 		local signalName = OUTPUT_EVENT_NAMES[record[1]]
 		local cast = record[2]
 		local caster = cast and CasterRegistry[cast.CasterId]
-
-		if cast then
-			CaptureTrajectoryBaseline(cast)
-		end
 
 		if signalName and caster then
 			local signal = caster[signalName]
@@ -656,9 +592,6 @@ function FastCast.Init(
 		end
 
 		local cast = select(1, ...)
-		if cast then
-			CaptureTrajectoryBaseline(cast)
-		end
 		local caster = cast and CasterRegistry[cast.CasterId]
 		local signal = caster and caster[eventName]
 		if Signal.is(signal) then
@@ -951,9 +884,7 @@ Sets the velocity of an ActiveCast to the specified Vector3.
 
 ]=]
 function FastCast:SetVelocityCast(cast: vaildcast, velocity: Vector3)
-	QueueTrajectoryChange(cast, "SetVelocity", velocity)
 	ModifyTransformation(cast, velocity, nil, nil)
-	CaptureTrajectoryBaseline(cast)
 end
 
 --[=[
@@ -967,9 +898,7 @@ Sets the acceleration of an ActiveCast to the specified Vector3.
 
 ]=]
 function FastCast:SetAccelerationCast(cast: vaildcast, acceleration: Vector3)
-	QueueTrajectoryChange(cast, "SetAcceleration", acceleration)
 	ModifyTransformation(cast, nil, acceleration, nil)
-	CaptureTrajectoryBaseline(cast)
 end
 
 --[=[
@@ -981,9 +910,7 @@ end
 	@within FastCast
 ]=]
 function FastCast:SetPositionCast(cast: vaildcast, position: Vector3)
-	QueueTrajectoryChange(cast, "SetPosition", position)
 	ModifyTransformation(cast, nil, nil, position)
-	CaptureTrajectoryBaseline(cast)
 end
 
 --[=[
@@ -997,10 +924,7 @@ Add position to an ActiveCast with the specified Vector3.
 
 ]=]
 function FastCast:AddPositionCast(cast: vaildcast, position: Vector3)
-	local newPosition = FastCast:GetPositionCast(cast) + position
-	QueueTrajectoryChange(cast, "AddPosition", position)
-	ModifyTransformation(cast, nil, nil, newPosition)
-	CaptureTrajectoryBaseline(cast)
+	FastCast:SetPositionCast(cast, FastCast:GetPositionCast(cast) + position)
 end
 
 --[=[
@@ -1014,10 +938,7 @@ Add velocity to an ActiveCast with the specified Vector3.
 
 ]=]
 function FastCast:AddVelocityCast(cast: vaildcast, velocity: Vector3)
-	local newVelocity = FastCast:GetVelocityCast(cast) + velocity
-	QueueTrajectoryChange(cast, "AddVelocity", velocity)
-	ModifyTransformation(cast, newVelocity, nil, nil)
-	CaptureTrajectoryBaseline(cast)
+	FastCast:SetVelocityCast(cast, FastCast:GetVelocityCast(cast) + velocity)
 end
 
 --[=[
@@ -1031,10 +952,7 @@ Add acceleration to an ActiveCast with the specified Vector3.
 
 ]=]
 function FastCast:AddAccelerationCast(cast: vaildcast, acceleration: Vector3)
-	local newAcceleration = FastCast:GetAccelerationCast(cast) + acceleration
-	QueueTrajectoryChange(cast, "AddAcceleration", acceleration)
-	ModifyTransformation(cast, nil, newAcceleration, nil)
-	CaptureTrajectoryBaseline(cast)
+	FastCast:SetAccelerationCast(cast, FastCast:GetAccelerationCast(cast) + acceleration)
 end
 
 --[=[
@@ -1105,29 +1023,12 @@ Synchronize new changes to the ActiveCast.
 ]=]
 function FastCastParallel:SyncChangesToCast(cast: vaildcast)
 	local syncChange: BindableEvent = (cast.Caster :: any).SyncChange
-	local trajectoryChanges = PendingTrajectoryChanges[cast]
-	local manualChanges = GetManualTrajectoryChanges(cast)
+	local cancelHighResCast = cast.StateInfo.CancelHighResCast
 
-	if manualChanges then
-		if not trajectoryChanges then
-			trajectoryChanges = {}
-			PendingTrajectoryChanges[cast] = trajectoryChanges
-		end
-		for _, change in manualChanges do
-			table.insert(trajectoryChanges, change)
-		end
-	end
-
-	local hasTrajectoryChanges = trajectoryChanges ~= nil and #trajectoryChanges > 0
-	local cancelHighResCast = cast.StateInfo.CancelHighResCast or hasTrajectoryChanges
-
-	-- These are one-shot requests; the worker applies trajectory operations
-	-- against its own current runtime/position instead of this possibly stale
-	-- cast snapshot.
+	-- Send the high-fidelity cancellation as a separate value so the worker
+	-- can apply it to its simulation cache. This field is a one-shot request.
 	cast.StateInfo.CancelHighResCast = false
-	PendingTrajectoryChanges[cast] = nil
-	CaptureTrajectoryBaseline(cast)
-	syncChange:Fire(cast, cancelHighResCast, false, trajectoryChanges)
+	syncChange:Fire(cast, cancelHighResCast)
 end
 
 --[=[
