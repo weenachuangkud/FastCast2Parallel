@@ -510,6 +510,11 @@ local function FlushFires()
 		if not batch then
 			batch = {}
 			FireBatches[worker] = batch
+		end
+
+		-- Batches are reused across frames, so register each non-empty batch
+		-- for this flush, not only when its backing table is first created.
+		if #batch == 0 then
 			usedCount += 1
 			FireUsed[usedCount] = worker
 		end
@@ -523,7 +528,9 @@ local function FlushFires()
 		local worker = FireUsed[i]
 		local batch = FireBatches[worker]
 
-		threads[worker]:SendMessage("FireBatch", batch)
+		-- Send a snapshot because the worker consumes the message asynchronously.
+		-- Do not let reuse of the pooled batch table mutate an in-flight request.
+		threads[worker]:SendMessage("FireBatch", table.clone(batch))
 		table.clear(batch)
 		FireUsed[i] = nil
 	end
