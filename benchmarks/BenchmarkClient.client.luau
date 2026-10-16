@@ -14,8 +14,6 @@
 		>       Increase HighFidelitySegmentSize
 		<       Decrease HighFidelitySegmentSize
 		R       Cycle cast type
-		[       Decrease workers
-		]       Increase workers
 		I       Show benchmark information
 		H       Show controls
 		N       Toggle Client / Server input mode
@@ -49,12 +47,10 @@ local Config = {
 	HighFidelitySegmentSizeStep = 0.05,
 	MinHighFidelitySegmentSize = 0.05,
 
-	MinWorkers = 2,
 	ProjectileStep = 500,
 }
 
 --// Constants
-local NUM_WORKERS_CHANGE_COOLDOWN = 4.5
 local BENCHMARK_COOLDOWN = 2.5
 local INPUT_MODE_TOGGLE_KEY = Enum.KeyCode.N
 
@@ -114,6 +110,8 @@ CastBehavior.CosmeticBulletTemplate = ProjectileTemplate
 
 CastBehavior.VisualizeCasts = Config.VisualizeCasts
 CastBehavior.RaycastParams = CastParams
+CastBehavior.FastCastEventsConfig.UseCastFire = true
+CastBehavior.FastCastEventsConfig.UseCastTerminating = true
 
 --// State
 
@@ -121,7 +119,6 @@ local Caster
 local ActiveCasts = {}
 
 local IsBenchmarking = false
-local IsReconfiguring = false
 
 local InputMode = "Client"
 
@@ -160,10 +157,32 @@ local function onCastFire(cast)
 	ActiveCasts[#ActiveCasts + 1] = cast
 end
 
+local function onCastTerminating(cast)
+	local cosmetic = cast.RayInfo.CosmeticBulletObject
+
+	if cosmetic and cosmetic.Parent then
+		cosmetic:Destroy()
+	end
+
+	-- Cleanup normally terminates casts in reverse order, so the current cast
+	-- is the final array entry and can be removed without shifting the list.
+	if ActiveCasts[#ActiveCasts] == cast then
+		ActiveCasts[#ActiveCasts] = nil
+	else
+		local index = table.find(ActiveCasts, cast)
+		if index then
+			table.remove(ActiveCasts, index)
+		end
+	end
+end
+
 local function createCaster()
 	FastCast.Init(Config.NumWorkers, Config.MovementMode)
+
 	local caster = FastCast.new()
 	caster.CastFire = onCastFire
+	caster.CastTerminating = onCastTerminating
+
 	return caster
 end
 
@@ -193,15 +212,13 @@ local function printBenchmarkInfo()
 	print(("Projectiles: %d"):format(Config.ProjectileAmount))
 	print(("Velocity: %.2f"):format(Config.Velocity))
 	print(("CastType: %s"):format(Config.CastType))
-	print(
-		"Instanced: %s",
+	print(("Instanced: %s"):format(
 		Config.Instanced and "Enabled" or "Disabled"
-	)
+	))
 
-	print(
-		"VisualizeCasts: %s",
+	print(("VisualizeCasts: %s"):format(
 		CastBehavior.VisualizeCasts and "Enabled" or "Disabled"
-	)
+	))
 
 	print(("HighFidelityBehavior: %s"):format(getHighFidelityName()))
 
@@ -215,7 +232,7 @@ local function printBenchmarkInfo()
 
 	print(("InputMode: %s"):format(InputMode))
 
-		print(("numWorkers: %d"):format(Config.NumWorkers))
+	print(("numWorkers: %d"):format(Config.NumWorkers))
 end
 
 --// Benchmark Output
@@ -298,7 +315,7 @@ local function fireProjectiles()
 	local random = Random.new(Config.RandomSeed)
 
 	for _ = 1, Config.ProjectileAmount do
-		task.spawn(fireProjectile, random)
+		fireProjectile(random)
 	end
 end
 
@@ -311,16 +328,16 @@ local function cleanupCasts()
 		if cast then
 			FastCast:TerminateCast(cast)
 		end
-
-		ActiveCasts[i] = nil
 	end
+
+	table.clear(ActiveCasts)
 end
 
 
 --// Benchmark
 
 local function benchmark()
-	if IsBenchmarking or IsReconfiguring then
+	if IsBenchmarking then
 		return
 	end
 
@@ -363,6 +380,7 @@ local function benchmark()
 		-- Cleanup
 		printSeparator("CLEANUP")
 
+		local activeCount = #ActiveCasts
 		local cleanupStarted = os.clock()
 
 		cleanupCasts()
@@ -371,7 +389,7 @@ local function benchmark()
 
 		printOperationStats(
 			cleanupElapsed,
-			Config.ProjectileAmount
+			activeCount
 		)
 
 		-- Clear our references
@@ -519,41 +537,13 @@ end
 --// Mode Switching
 
 local function switchInputMode()
-	if IsBenchmarking or IsReconfiguring then
+	if IsBenchmarking then
 		return
 	end
 
 	InputMode = if InputMode == "Client" then "Server" else "Client"
 
 	print(("InputMode: %s"):format(InputMode))
-end
-
-local function changeWorkerCount(amount)
-	if IsBenchmarking or IsReconfiguring then
-		return
-	end
-
-
-	local newCount = math.max(
-		Config.MinWorkers,
-		Config.NumWorkers + amount
-	)
-
-	if newCount == Config.NumWorkers then
-		return
-	end
-
-	IsReconfiguring = true
-
-	Config.NumWorkers = newCount
-
-	rebuildCaster()
-
-	print(("numWorkers: %d"):format(Config.NumWorkers))
-
-	task.wait(NUM_WORKERS_CHANGE_COOLDOWN)
-
-	IsReconfiguring = false
 end
 
 --// Controls
@@ -572,8 +562,6 @@ local function showControls()
 	print("<  - Decrease HighFidelitySegmentSize")
 		print("N  - Toggle Client / Server input mode")
 	print("R  - Cycle Raycast / Blockcast / Spherecast")
-	print("[  - Decrease numWorkers")
-	print("]  - Increase numWorkers")
 	print("I  - Show benchmark info")
 	print("H  - Show controls")
 end
@@ -602,7 +590,7 @@ local Keybinds = {
 	end,
 
 	[Enum.KeyCode.J] = function()
-		if not IsBenchmarking and not IsReconfiguring then
+		if not IsBenchmarking then
 			toggleMovementMode()
 		end
 	end,
@@ -625,14 +613,6 @@ local Keybinds = {
 		if not IsBenchmarking then
 			cycleCastType()
 		end
-	end,
-
-	[Enum.KeyCode.LeftBracket] = function()
-		changeWorkerCount(-1)
-	end,
-
-	[Enum.KeyCode.RightBracket] = function()
-		changeWorkerCount(1)
 	end,
 
 	[Enum.KeyCode.Period] = function()
