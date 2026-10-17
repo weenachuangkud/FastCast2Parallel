@@ -52,18 +52,152 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 	table.clear(cast :: any)
 end
 
--- Keep the worker's trajectory table because ParallelSimulation caches its reference.
--- SyncChangesToCast updates trajectory fields and UserData, while runtime and distance
--- remain owned by the worker and must not be overwritten by a stale cast snapshot.
-local function SyncTrajectoryChanges(sourceState: any, targetState: any)
-	local sourceTrajectory = sourceState.Trajectory
-	local targetTrajectory = targetState.Trajectory
+-- These values are updated by the worker and must never be copied from
+-- the caller's potentially stale cast snapshot.
+local WorkerOwnedStateFields = {
+	TotalRuntime = true,
+	DistanceCovered = true,
+	IsActivelySimulatingPierce = true,
+	IsActivelyResimulating = true,
+}
 
-	targetTrajectory.StartTime = sourceTrajectory.StartTime
-	targetTrajectory.EndTime = sourceTrajectory.EndTime
-	targetTrajectory.Origin = sourceTrajectory.Origin
-	targetTrajectory.InitialVelocity = sourceTrajectory.InitialVelocity
-	targetTrajectory.Acceleration = sourceTrajectory.Acceleration
+local PreservedCastFields = {
+	Caster = true,
+	CasterId = true,
+	ID = true,
+	Mode = true,
+	_Destroying = true,
+	_TerminationQueued = true,
+	StateInfo = true,
+	RayInfo = true,
+	CastVariant = true,
+	Type = true,
+	UserData = true,
+	CFrame = true,
+}
+
+-- Preserve the trajectory table because ParallelSimulation caches its reference.
+local function SyncTrajectoryChanges(sourceTrajectory: any, targetTrajectory: any)
+	for key in targetTrajectory do
+		if sourceTrajectory[key] == nil then
+			targetTrajectory[key] = nil
+		end
+	end
+
+	for key, value in sourceTrajectory do
+		targetTrajectory[key] = value
+	end
+end
+
+local function SyncCastData(sourceCast: any, targetCast: any)
+	local sourceState = sourceCast.StateInfo
+	local targetState = targetCast.StateInfo
+	local targetTrajectory = targetState.Trajectory
+	local targetRayInfo = targetCast.RayInfo
+	local sourceRayInfo = sourceCast.RayInfo
+	local oldRayInfoSize = targetRayInfo.Size
+	local oldRayInfoRadius = targetRayInfo.Radius
+	local oldVariant = targetCast.CastVariant
+	local oldVariantSize = oldVariant.Size
+	local oldVariantRadius = oldVariant.Radius
+
+	-- Copy every state field except values owned by the simulation worker.
+	for key in targetState do
+		if not WorkerOwnedStateFields[key]
+			and key ~= "Trajectory"
+			and sourceState[key] == nil
+		then
+			targetState[key] = nil
+		end
+	end
+
+	for key, value in sourceState do
+		if not WorkerOwnedStateFields[key] then
+			if key == "Trajectory" then
+				SyncTrajectoryChanges(value, targetTrajectory)
+			else
+				targetState[key] = value
+			end
+		end
+	end
+
+	targetState.Trajectory = targetTrajectory
+
+	-- Keep RayInfo's table identity because the simulation caches its reference.
+	for key in targetRayInfo do
+		if sourceRayInfo[key] == nil then
+			targetRayInfo[key] = nil
+		end
+	end
+
+	for key, value in sourceRayInfo do
+		targetRayInfo[key] = value
+	end
+
+	-- Copy custom cast-level fields without replacing identity or worker-owned data.
+	for key in targetCast do
+		if not PreservedCastFields[key] and sourceCast[key] == nil then
+			targetCast[key] = nil
+		end
+	end
+
+	for key, value in sourceCast do
+		if not PreservedCastFields[key] then
+			targetCast[key] = value
+		end
+	end
+
+	targetCast.UserData = sourceCast.UserData
+
+	-- CastVariant determines which shape the worker simulates. Accept shape-size
+	-- edits through either RayInfo or CastVariant, then keep both representations
+	-- consistent for the selected cast type.
+	local sourceVariant = sourceCast.CastVariant
+	local castType = sourceVariant.CastType
+	if sourceCast.Type ~= targetCast.Type then
+		if sourceCast.Type == "Raycast" then
+			castType = EnumCastTypes.Raycast
+		elseif sourceCast.Type == "Blockcast" then
+			castType = EnumCastTypes.Blockcast
+		elseif sourceCast.Type == "Spherecast" then
+			castType = EnumCastTypes.Spherecast
+		end
+	end
+
+	local variant = table.clone(sourceVariant)
+	variant.CastType = castType
+
+	if castType == EnumCastTypes.Blockcast then
+		local size = sourceRayInfo.Size
+		if size == oldRayInfoSize and sourceVariant.Size ~= oldVariantSize then
+			size = sourceVariant.Size
+		end
+
+		variant.Size = size
+		variant.Radius = nil
+		targetRayInfo.Size = size
+		targetRayInfo.Radius = nil
+		targetCast.Type = "Blockcast"
+	elseif castType == EnumCastTypes.Spherecast then
+		local radius = sourceRayInfo.Radius
+		if radius == oldRayInfoRadius and sourceVariant.Radius ~= oldVariantRadius then
+			radius = sourceVariant.Radius
+		end
+
+		variant.Radius = radius
+		variant.Size = nil
+		targetRayInfo.Radius = radius
+		targetRayInfo.Size = nil
+		targetCast.Type = "Spherecast"
+	else
+		variant.Size = nil
+		variant.Radius = nil
+		targetRayInfo.Size = nil
+		targetRayInfo.Radius = nil
+		targetCast.Type = "Raycast"
+	end
+
+	targetCast.CastVariant = variant
 end
 
 local BaseCastInitialized = false
@@ -115,8 +249,9 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 					TargetCast.StateInfo.IsPaused = cast.StateInfo.IsPaused
 				end
 			else
-				SyncTrajectoryChanges(cast.StateInfo, TargetCast.StateInfo)
-				TargetCast.UserData = cast.UserData
+				local previousCosmetic = TargetCast.RayInfo.CosmeticBulletObject
+				SyncCastData(cast, TargetCast)
+				ParallelSimulation.SyncCast(TargetCast, previousCosmetic)
 			end
 
 			if cancelHighResCast then
