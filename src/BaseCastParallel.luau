@@ -134,6 +134,9 @@ local function SyncCastData(sourceCast: any, targetCast: any)
 	local oldMaxDistance = targetRayInfo.MaxDistance
 	local oldHighFidelityBehavior = targetState.HighFidelityBehavior
 	local oldHighFidelitySegmentSize = targetState.HighFidelitySegmentSize
+	local oldFastCastEventsConfig = targetState.FastCastEventsConfig
+	local oldFastCastEventsModuleConfig = targetState.FastCastEventsModuleConfig
+	local oldEventModule = targetRayInfo.FastCastEventsModule
 	local trajectoryChanged = false
 
 	-- Copy every state field except values owned by the simulation worker.
@@ -243,6 +246,9 @@ local function SyncCastData(sourceCast: any, targetCast: any)
 		or oldMaxDistance ~= targetRayInfo.MaxDistance
 		or oldHighFidelityBehavior ~= targetState.HighFidelityBehavior
 		or oldHighFidelitySegmentSize ~= targetState.HighFidelitySegmentSize
+		or oldFastCastEventsConfig ~= targetState.FastCastEventsConfig
+		or oldFastCastEventsModuleConfig ~= targetState.FastCastEventsModuleConfig
+		or oldEventModule ~= targetRayInfo.FastCastEventsModule
 end
 
 local BaseCastInitialized = false
@@ -298,7 +304,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				local cancelResimulation = SyncCastData(cast, TargetCast)
 				ParallelSimulation.SyncCast(TargetCast, previousCosmetic)
 
-				if cancelHighResCast or cancelResimulation then
+				if cancelResimulation then
 					ParallelSimulation.CancelHighResCast(ID)
 				end
 			end
