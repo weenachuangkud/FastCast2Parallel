@@ -558,7 +558,7 @@ return function()
 					end,
 				})
 
-				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				fire(caster, "Raycast", Vector3.new(0, 100, 0), Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(
 					Framework.waitFor(function()
@@ -575,7 +575,7 @@ return function()
 
 			test("SyncChangesToCast can change cast type and shape", function(expect)
 				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 4, -20), Vector3.new(2, 2, 2))
+				local wall = createWall(arena, Vector3.new(0, 104, -20), Vector3.new(2, 2, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local hitInstance = nil
@@ -594,7 +594,7 @@ return function()
 					end,
 				})
 
-				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				fire(caster, "Raycast", Vector3.new(0, 100, 0), Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(
 					Framework.waitFor(function()
