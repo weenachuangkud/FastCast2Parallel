@@ -535,6 +535,79 @@ return function()
 				caster:Destroy()
 				arena:Destroy()
 			end)
+			test("SyncChangesToCast updates MaxDistance", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local terminatedDistance = nil
+				local hitInstance = nil
+				local caster: any
+
+				caster = createParallelCaster({
+					CastFire = function(cast)
+						FastCast:PauseCast(cast)
+						cast.RayInfo.MaxDistance = 5
+						caster:SyncChangesToCast(cast)
+						FastCast:ResumeCast(cast)
+					end,
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+					CastTerminating = function(cast)
+						terminatedDistance = cast.StateInfo.DistanceCovered
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminatedDistance ~= nil
+					end, HIT_TIMEOUT),
+					"cast did not terminate after MaxDistance was updated"
+				)
+				expect.equal(hitInstance, nil, "cast hit despite the updated MaxDistance")
+				expect.truthy(terminatedDistance >= 5, "cast terminated before reaching the updated MaxDistance")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("SyncChangesToCast can change cast type and shape", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 4, -20), Vector3.new(2, 2, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local hitInstance = nil
+				local caster: any
+
+				caster = createParallelCaster({
+					CastFire = function(cast)
+						FastCast:PauseCast(cast)
+						cast.Type = FastCast.CastType.Blockcast
+						cast.RayInfo.Size = Vector3.new(10, 10, 10)
+						caster:SyncChangesToCast(cast)
+						FastCast:ResumeCast(cast)
+					end,
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return hitInstance ~= nil
+					end, HIT_TIMEOUT),
+					"updated Blockcast did not hit the wall"
+				)
+				expect.equal(hitInstance, wall, "updated Blockcast hit the wrong instance")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("SetFastCastEventsModule forwards module events", function(expect)
 				local arena = createArena()
 				createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
