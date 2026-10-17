@@ -535,6 +535,7 @@ return function()
 				caster:Destroy()
 				arena:Destroy()
 			end)
+
 			test("SyncChangesToCast updates MaxDistance", function(expect)
 				local arena = createArena()
 				local container = createContainer(arena)
