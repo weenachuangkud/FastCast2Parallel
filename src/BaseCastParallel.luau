@@ -77,16 +77,26 @@ local PreservedCastFields = {
 }
 
 -- Preserve the trajectory table because ParallelSimulation caches its reference.
-local function SyncTrajectoryChanges(sourceTrajectory: any, targetTrajectory: any)
+local function SyncTrajectoryChanges(sourceTrajectory: any, targetTrajectory: any): boolean
+	local changed = false
+
 	for key in targetTrajectory do
 		if sourceTrajectory[key] == nil then
 			targetTrajectory[key] = nil
+			changed = true
+		elseif sourceTrajectory[key] ~= targetTrajectory[key] then
+			changed = true
 		end
 	end
 
 	for key, value in sourceTrajectory do
-		targetTrajectory[key] = value
+		if targetTrajectory[key] ~= value then
+			changed = true
+			targetTrajectory[key] = value
+		end
 	end
+
+	return changed
 end
 
 local function SyncCastData(sourceCast: any, targetCast: any)
@@ -95,11 +105,19 @@ local function SyncCastData(sourceCast: any, targetCast: any)
 	local targetTrajectory = targetState.Trajectory
 	local targetRayInfo = targetCast.RayInfo
 	local sourceRayInfo = sourceCast.RayInfo
-	local oldRayInfoSize = targetRayInfo.Size
-	local oldRayInfoRadius = targetRayInfo.Radius
+	local oldCastType = targetCast.Type
 	local oldVariant = targetCast.CastVariant
+	local oldVariantType = oldVariant.CastType
 	local oldVariantSize = oldVariant.Size
 	local oldVariantRadius = oldVariant.Radius
+	local oldRayInfoSize = targetRayInfo.Size
+	local oldRayInfoRadius = targetRayInfo.Radius
+	local oldParameters = targetRayInfo.Parameters
+	local oldWorldRoot = targetRayInfo.WorldRoot
+	local oldMaxDistance = targetRayInfo.MaxDistance
+	local oldHighFidelityBehavior = targetState.HighFidelityBehavior
+	local oldHighFidelitySegmentSize = targetState.HighFidelitySegmentSize
+	local trajectoryChanged = false
 
 	-- Copy every state field except values owned by the simulation worker.
 	for key in targetState do
@@ -114,7 +132,7 @@ local function SyncCastData(sourceCast: any, targetCast: any)
 	for key, value in sourceState do
 		if not WorkerOwnedStateFields[key] then
 			if key == "Trajectory" then
-				SyncTrajectoryChanges(value, targetTrajectory)
+				trajectoryChanged = SyncTrajectoryChanges(value, targetTrajectory)
 			else
 				targetState[key] = value
 			end
@@ -154,14 +172,10 @@ local function SyncCastData(sourceCast: any, targetCast: any)
 	-- consistent for the selected cast type.
 	local sourceVariant = sourceCast.CastVariant
 	local castType = sourceVariant.CastType
-	if sourceCast.Type ~= targetCast.Type then
-		if sourceCast.Type == "Raycast" then
-			castType = EnumCastTypes.Raycast
-		elseif sourceCast.Type == "Blockcast" then
-			castType = EnumCastTypes.Blockcast
-		elseif sourceCast.Type == "Spherecast" then
-			castType = EnumCastTypes.Spherecast
-		end
+	if sourceCast.Type ~= oldCastType then
+		castType = sourceCast.Type
+	elseif sourceVariant.CastType ~= oldVariantType then
+		castType = sourceVariant.CastType
 	end
 
 	local variant = table.clone(sourceVariant)
@@ -172,32 +186,44 @@ local function SyncCastData(sourceCast: any, targetCast: any)
 		if size == oldRayInfoSize and sourceVariant.Size ~= oldVariantSize then
 			size = sourceVariant.Size
 		end
+		size = size or sourceVariant.Size or Vector3.one
 
 		variant.Size = size
 		variant.Radius = nil
 		targetRayInfo.Size = size
 		targetRayInfo.Radius = nil
-		targetCast.Type = "Blockcast"
+		targetCast.Type = EnumCastTypes.Blockcast
 	elseif castType == EnumCastTypes.Spherecast then
 		local radius = sourceRayInfo.Radius
 		if radius == oldRayInfoRadius and sourceVariant.Radius ~= oldVariantRadius then
 			radius = sourceVariant.Radius
 		end
+		radius = radius or sourceVariant.Radius or 0.5
 
 		variant.Radius = radius
 		variant.Size = nil
 		targetRayInfo.Radius = radius
 		targetRayInfo.Size = nil
-		targetCast.Type = "Spherecast"
+		targetCast.Type = EnumCastTypes.Spherecast
 	else
 		variant.Size = nil
 		variant.Radius = nil
 		targetRayInfo.Size = nil
 		targetRayInfo.Radius = nil
-		targetCast.Type = "Raycast"
+		targetCast.Type = EnumCastTypes.Raycast
 	end
 
 	targetCast.CastVariant = variant
+
+	return trajectoryChanged
+		or oldCastType ~= castType
+		or oldVariantSize ~= variant.Size
+		or oldVariantRadius ~= variant.Radius
+		or oldParameters ~= targetRayInfo.Parameters
+		or oldWorldRoot ~= targetRayInfo.WorldRoot
+		or oldMaxDistance ~= targetRayInfo.MaxDistance
+		or oldHighFidelityBehavior ~= targetState.HighFidelityBehavior
+		or oldHighFidelitySegmentSize ~= targetState.HighFidelitySegmentSize
 end
 
 local BaseCastInitialized = false
@@ -250,8 +276,12 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				end
 			else
 				local previousCosmetic = TargetCast.RayInfo.CosmeticBulletObject
-				SyncCastData(cast, TargetCast)
+				local cancelResimulation = SyncCastData(cast, TargetCast)
 				ParallelSimulation.SyncCast(TargetCast, previousCosmetic)
+
+				if cancelHighResCast or cancelResimulation then
+					ParallelSimulation.CancelHighResCast(ID)
+				end
 			end
 
 			if cancelHighResCast then
