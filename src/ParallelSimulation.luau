@@ -1802,7 +1802,12 @@ function ParallelSimulation.SyncCast(cast: any, previousCosmetic: Instance?)
 
 	local hasCosmetic = cosmetic ~= nil
 	if casts_HasCosmetic[id] ~= hasCosmetic then
-		castsWithCosmetics += if hasCosmetic then 1 else -1
+		if hasCosmetic then
+			castsWithCosmetics += 1
+		else
+			castsWithCosmetics -= 1
+		end
+
 		casts_HasCosmetic[id] = hasCosmetic
 	end
 
