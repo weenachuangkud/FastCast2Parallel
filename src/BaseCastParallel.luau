@@ -53,7 +53,7 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 end
 
 -- Keep the worker's trajectory table because ParallelSimulation caches its reference.
--- Only trajectory fields are synchronized by SyncChangesToCast; runtime and distance
+-- SyncChangesToCast updates trajectory fields and UserData, while runtime and distance
 -- remain owned by the worker and must not be overwritten by a stale cast snapshot.
 local function SyncTrajectoryChanges(sourceState: any, targetState: any)
 	local sourceTrajectory = sourceState.Trajectory
@@ -116,6 +116,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				end
 			else
 				SyncTrajectoryChanges(cast.StateInfo, TargetCast.StateInfo)
+				TargetCast.UserData = cast.UserData
 			end
 
 			if cancelHighResCast then
