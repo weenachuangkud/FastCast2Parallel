@@ -1759,7 +1759,11 @@ function ParallelSimulation.Unregister(castID: number)
 end
 
 -- Refresh worker-side caches after mutable cast fields have been copied.
-function ParallelSimulation.SyncCast(cast: any, previousCosmetic: Instance?)
+function ParallelSimulation.SyncCast(
+	cast: any,
+	previousCosmetic: Instance?,
+	previousEventModule: ModuleScript?
+)
 	local id = cast.ID
 	if not casts_Trajectory[id] then
 		return
@@ -1783,10 +1787,12 @@ function ParallelSimulation.SyncCast(cast: any, previousCosmetic: Instance?)
 	casts_MaxDistance[id] = rayInfo.MaxDistance or DEFAULT_MAX_DISTANCE
 
 	local eventModule = rayInfo.FastCastEventsModule
-	if typeof(eventModule) == "Instance" and eventModule:IsA("ModuleScript") then
-		casts_FastCastEvents[id] = require(eventModule)
-	else
-		casts_FastCastEvents[id] = nil
+	if previousEventModule ~= eventModule then
+		if typeof(eventModule) == "Instance" and eventModule:IsA("ModuleScript") then
+			casts_FastCastEvents[id] = require(eventModule)
+		else
+			casts_FastCastEvents[id] = nil
+		end
 	end
 
 	local eventConfig = casts_FastCastEventsConfig[id]
