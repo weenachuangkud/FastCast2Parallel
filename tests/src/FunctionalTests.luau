@@ -493,6 +493,48 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("SyncChangesToCast updates UserData used by worker OnStep", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.FastCastEventsModuleConfig.UseOnStep = true
+				behavior.UserData = {
+					OnStepVelocity = Vector3.yAxis * 120,
+				}
+
+				local hitInstance = nil
+				local caster: any
+				caster = createParallelCaster({
+					CastFire = function(cast)
+						-- Hold the cast until the updated UserData reaches the worker.
+						FastCast:PauseCast(cast)
+						cast.UserData = {
+							OnStepVelocity = Vector3.new(0, 0, -120),
+						}
+						caster:SyncChangesToCast(cast)
+						FastCast:ResumeCast(cast)
+					end,
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+				})
+
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return hitInstance ~= nil
+					end, HIT_TIMEOUT),
+					"worker OnStep did not receive the updated UserData"
+				)
+				expect.equal(hitInstance, wall, "updated UserData did not steer the cast to the wall")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
 			test("SetFastCastEventsModule forwards module events", function(expect)
 				local arena = createArena()
 				createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
