@@ -1758,6 +1758,87 @@ function ParallelSimulation.Unregister(castID: number)
 	ParallelSimulation_Unregister(castID)
 end
 
+-- Refresh worker-side caches after mutable cast fields have been copied.
+function ParallelSimulation.SyncCast(
+	cast: any,
+	previousCosmetic: Instance?,
+	previousEventModule: ModuleScript?
+)
+	local id = cast.ID
+	if not casts_Trajectory[id] then
+		return
+	end
+
+	local stateInfo = cast.StateInfo
+	local rayInfo = cast.RayInfo
+	local variant = cast.CastVariant
+
+	casts_Trajectory[id] = stateInfo.Trajectory
+	casts_UserData[id] = cast.UserData
+	casts_HighFidelitySegmentSize[id] = stateInfo.HighFidelitySegmentSize or 0.1
+	casts_HighFidelityBehavior[id] = stateInfo.HighFidelityBehavior or 0
+	casts_FastCastEventsModuleConfig[id] = stateInfo.FastCastEventsModuleConfig
+	casts_FastCastEventsConfig[id] = stateInfo.FastCastEventsConfig
+	casts_VisualizeCasts[id] = stateInfo.VisualizeCasts
+	casts_VisualizeCastSettings[id] = stateInfo.VisualizeCastSettings
+	casts_RayInfo[id] = rayInfo
+	casts_CastType[id] = variant.CastType
+	casts_CastVariant[id] = variant
+	casts_MaxDistance[id] = rayInfo.MaxDistance or DEFAULT_MAX_DISTANCE
+
+	local eventModule = rayInfo.FastCastEventsModule
+	if previousEventModule ~= eventModule then
+		if typeof(eventModule) == "Instance" and eventModule:IsA("ModuleScript") then
+			casts_FastCastEvents[id] = require(eventModule)
+		else
+			casts_FastCastEvents[id] = nil
+		end
+	end
+
+	local eventConfig = casts_FastCastEventsConfig[id]
+	local moduleConfig = casts_FastCastEventsModuleConfig[id]
+	local moduleEvents = casts_FastCastEvents[id]
+
+	casts_WantLengthChanged[id] =
+		(eventConfig ~= nil and eventConfig.UseLengthChanged == true)
+		or (
+			moduleConfig ~= nil
+			and moduleConfig.UseLengthChanged == true
+			and moduleEvents ~= nil
+			and moduleEvents.LengthChanged ~= nil
+		)
+
+	casts_WantOnStep[id] =
+		moduleConfig ~= nil
+		and moduleConfig.UseOnStep == true
+		and moduleEvents ~= nil
+		and type(moduleEvents.OnStep) == "function"
+
+	local cosmetic = rayInfo.CosmeticBulletObject
+	local hasCosmetic = cosmetic ~= nil
+	if casts_HasCosmetic[id] ~= hasCosmetic then
+		castsWithCosmetics += if hasCosmetic then 1 else -1
+		casts_HasCosmetic[id] = hasCosmetic
+	end
+
+	if previousCosmetic ~= cosmetic and casts_ActiveMotor6Ds[id] then
+		if BaseCastRef and BaseCastRef._ReturnMotor6D then
+			BaseCastRef:_ReturnMotor6D(casts_ActiveMotor6Ds[id])
+		end
+		casts_ActiveMotor6Ds[id] = nil
+	end
+
+	if CurrentMovementMode == "Motor6D"
+		and MovementEnabled
+		and cosmetic
+		and not casts_ActiveMotor6Ds[id]
+		and BaseCastRef
+		and BaseCastRef._GetMotor6D
+	then
+		casts_ActiveMotor6Ds[id] = BaseCastRef:_GetMotor6D(cosmetic)
+	end
+end
+
 function ParallelSimulation.CancelHighResCast(castID: number)
 	if casts_CancelHighResCast[castID] ~= nil then
 		casts_CancelHighResCast[castID] = true

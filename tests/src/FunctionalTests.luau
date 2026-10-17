@@ -637,6 +637,48 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("SyncChangesToCast refreshes the cached MaxDistance", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.FastCastEventsConfig.UseCastTerminating = true
+
+				local firedCast = nil
+				local terminationCount = 0
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						firedCast = cast
+						FastCast:PauseCast(cast)
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				})
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return firedCast ~= nil
+					end, HIT_TIMEOUT),
+					"parallel CastFire never ran"
+				)
+
+				local cast = firedCast :: any
+				cast.RayInfo.MaxDistance = 1
+				caster:SyncChangesToCast(cast)
+				FastCast:ResumeCast(cast)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminationCount == 1
+					end, HIT_TIMEOUT),
+					"worker did not use the updated MaxDistance cache"
+				)
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("SyncChangesToCast does not error", function(expect)
 				local arena = createArena()
 				local container = createContainer(arena)
