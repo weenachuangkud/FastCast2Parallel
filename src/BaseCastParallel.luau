@@ -166,7 +166,14 @@ local function SyncCastVariant(sourceCast: any, targetCast: any): boolean
 	targetCast.Type = castType
 
 	if castType == EnumCastTypes.Blockcast then
-		local size = ResolveShapeValue(sourceRayInfo, targetRayInfo, sourceVariant, targetVariant, "Size", Vector3.one)
+		local size = ResolveShapeValue(
+			sourceRayInfo,
+			targetRayInfo,
+			sourceVariant,
+			targetVariant,
+			"Size",
+			Vector3.one
+		)
 		changed = changed or targetRayInfo.Size ~= size or targetRayInfo.Radius ~= nil
 			or targetVariant.Size ~= size or targetVariant.Radius ~= nil
 
@@ -175,7 +182,14 @@ local function SyncCastVariant(sourceCast: any, targetCast: any): boolean
 		targetRayInfo.Size = size
 		targetRayInfo.Radius = nil
 	elseif castType == EnumCastTypes.Spherecast then
-		local radius = ResolveShapeValue(sourceRayInfo, targetRayInfo, sourceVariant, targetVariant, "Radius", 0.5)
+		local radius = ResolveShapeValue(
+			sourceRayInfo,
+			targetRayInfo,
+			sourceVariant,
+			targetVariant,
+			"Radius",
+			0.5
+		)
 		changed = changed or targetRayInfo.Radius ~= radius or targetRayInfo.Size ~= nil
 			or targetVariant.Radius ~= radius or targetVariant.Size ~= nil
 
