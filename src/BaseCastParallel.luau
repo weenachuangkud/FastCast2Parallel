@@ -56,7 +56,6 @@ end
 -- Runtime, distance, resimulation state, and CFrame remain worker-owned.
 local MutableCastFields = {
 	UserData = true,
-	Type = true,
 
 	StateInfo = {
 		IsPaused = true,
@@ -118,7 +117,6 @@ local MutableCastFields = {
 	},
 
 	CastVariant = {
-		CastType = true,
 		Size = true,
 		Radius = true,
 	},
@@ -174,6 +172,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				end
 			else
 				local previousCosmetic = TargetCast.RayInfo.CosmeticBulletObject
+				local previousEventModule = TargetCast.RayInfo.FastCastEventsModule
 
 				for i, v in cast do
 					local mutable = MutableCastFields[i]
@@ -201,7 +200,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				-- UserData may be nil, in which case it isn't present in the source
 				-- table iteration above.
 				TargetCast.UserData = cast.UserData
-				ParallelSimulation.SyncCast(TargetCast, previousCosmetic)
+				ParallelSimulation.SyncCast(TargetCast, previousCosmetic, previousEventModule)
 			end
 
 			if cancelHighResCast then
