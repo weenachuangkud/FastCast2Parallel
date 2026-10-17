@@ -52,8 +52,8 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 	table.clear(cast :: any)
 end
 
--- The worker owns runtime bookkeeping. SyncChangesToCast must not replace
--- these values with an older snapshot from the caller.
+-- These values are updated by the worker and must never be copied from
+-- the caller's potentially stale cast snapshot.
 local WorkerOwnedStateFields = {
 	TotalRuntime = true,
 	DistanceCovered = true,
@@ -76,14 +76,6 @@ local PreservedCastFields = {
 	CFrame = true,
 }
 
-local PreservedStateFields = table.clone(WorkerOwnedStateFields)
-PreservedStateFields.Trajectory = true
-
-local PreservedShapeFields = {
-	Size = true,
-	Radius = true,
-}
-
 local function NormalizeCastType(castType: any, fallback: number): number
 	if castType == "Raycast" then
 		return EnumCastTypes.Raycast
@@ -101,148 +93,162 @@ local function NormalizeCastType(castType: any, fallback: number): number
 	return fallback
 end
 
--- Copy mutable fields while retaining table identity and excluded worker data.
-local function SyncFields(source: any, target: any, preservedFields: any?): boolean
+-- Preserve the trajectory table because ParallelSimulation caches its reference.
+local function SyncTrajectoryChanges(sourceTrajectory: any, targetTrajectory: any): boolean
 	local changed = false
 
-	for key in target do
-		if (not preservedFields or not preservedFields[key]) and source[key] == nil then
-			target[key] = nil
+	for key in targetTrajectory do
+		if sourceTrajectory[key] == nil then
+			targetTrajectory[key] = nil
+			changed = true
+		elseif sourceTrajectory[key] ~= targetTrajectory[key] then
 			changed = true
 		end
 	end
 
-	for key, value in source do
-		if (not preservedFields or not preservedFields[key]) and target[key] ~= value then
-			target[key] = value
+	for key, value in sourceTrajectory do
+		if targetTrajectory[key] ~= value then
 			changed = true
+			targetTrajectory[key] = value
 		end
 	end
 
 	return changed
 end
 
-local function ResolveCastType(sourceCast: any, targetCast: any): number
-	local sourceType = NormalizeCastType(sourceCast.Type, sourceCast.CastVariant.CastType)
-	local targetType = NormalizeCastType(targetCast.Type, targetCast.CastVariant.CastType)
-
-	if sourceType ~= targetType then
-		return sourceType
-	end
-
-	return NormalizeCastType(sourceCast.CastVariant.CastType, sourceType)
-end
-
-local function ResolveShapeValue(
-	sourceRayInfo: any,
-	targetRayInfo: any,
-	sourceVariant: any,
-	targetVariant: any,
-	field: string,
-	fallback: any
-): any
-	local sourceInfoValue = sourceRayInfo[field]
-	local sourceVariantValue = sourceVariant[field]
-
-	if sourceInfoValue ~= targetRayInfo[field] then
-		return sourceInfoValue
-	elseif sourceVariantValue ~= targetVariant[field] then
-		return sourceVariantValue
-	end
-
-	return sourceInfoValue or sourceVariantValue or fallback
-end
-
-local function CancelHighResCastIfChanged(castID: number, oldValue: any, newValue: any)
-	if oldValue ~= newValue then
-		ParallelSimulation.CancelHighResCast(castID)
-	end
-end
-
-local function SyncCastVariant(sourceCast: any, targetCast: any)
-	local castID = targetCast.ID
-	local sourceRayInfo = sourceCast.RayInfo
+local function SyncCastData(sourceCast: any, targetCast: any)
+	local sourceState = sourceCast.StateInfo
+	local targetState = targetCast.StateInfo
+	local targetTrajectory = targetState.Trajectory
 	local targetRayInfo = targetCast.RayInfo
+	local sourceRayInfo = sourceCast.RayInfo
+	local oldCastType = targetCast.Type
+	local oldVariant = targetCast.CastVariant
+	local oldVariantType = oldVariant.CastType
+	local oldVariantSize = oldVariant.Size
+	local oldVariantRadius = oldVariant.Radius
+	local oldRayInfoSize = targetRayInfo.Size
+	local oldRayInfoRadius = targetRayInfo.Radius
+	local oldParameters = targetRayInfo.Parameters
+	local oldWorldRoot = targetRayInfo.WorldRoot
+	local oldMaxDistance = targetRayInfo.MaxDistance
+	local oldHighFidelityBehavior = targetState.HighFidelityBehavior
+	local oldHighFidelitySegmentSize = targetState.HighFidelitySegmentSize
+	local oldFastCastEventsConfig = targetState.FastCastEventsConfig
+	local oldFastCastEventsModuleConfig = targetState.FastCastEventsModuleConfig
+	local oldEventModule = targetRayInfo.FastCastEventsModule
+	local trajectoryChanged = false
+
+	-- Copy every state field except values owned by the simulation worker.
+	for key in targetState do
+		if not WorkerOwnedStateFields[key]
+			and key ~= "Trajectory"
+			and sourceState[key] == nil
+		then
+			targetState[key] = nil
+		end
+	end
+
+	for key, value in sourceState do
+		if not WorkerOwnedStateFields[key] then
+			if key == "Trajectory" then
+				trajectoryChanged = SyncTrajectoryChanges(value, targetTrajectory)
+			else
+				targetState[key] = value
+			end
+		end
+	end
+
+	targetState.Trajectory = targetTrajectory
+
+	-- Keep RayInfo's table identity because the simulation caches its reference.
+	for key in targetRayInfo do
+		if sourceRayInfo[key] == nil then
+			targetRayInfo[key] = nil
+		end
+	end
+
+	for key, value in sourceRayInfo do
+		targetRayInfo[key] = value
+	end
+
+	-- Copy custom cast-level fields without replacing identity or worker-owned data.
+	for key in targetCast do
+		if not PreservedCastFields[key] and sourceCast[key] == nil then
+			targetCast[key] = nil
+		end
+	end
+
+	for key, value in sourceCast do
+		if not PreservedCastFields[key] then
+			targetCast[key] = value
+		end
+	end
+
+	targetCast.UserData = sourceCast.UserData
+
+	-- CastVariant determines which shape the worker simulates. Accept shape-size
+	-- edits through either RayInfo or CastVariant, then keep both representations
+	-- consistent for the selected cast type.
 	local sourceVariant = sourceCast.CastVariant
-	local targetVariant = targetCast.CastVariant
-	local castType = ResolveCastType(sourceCast, targetCast)
+	local castType = sourceVariant.CastType
+	if sourceCast.Type ~= oldCastType then
+		castType = NormalizeCastType(sourceCast.Type, sourceVariant.CastType)
+	elseif sourceVariant.CastType ~= oldVariantType then
+		castType = NormalizeCastType(sourceVariant.CastType, oldVariantType)
+	else
+		castType = NormalizeCastType(castType, oldVariantType)
+	end
+
 	local variant = table.clone(sourceVariant)
-
-	CancelHighResCastIfChanged(castID, targetCast.Type, castType)
-	CancelHighResCastIfChanged(castID, targetVariant.CastType, castType)
-
 	variant.CastType = castType
-	targetCast.Type = castType
 
 	if castType == EnumCastTypes.Blockcast then
-		local size = ResolveShapeValue(
-			sourceRayInfo,
-			targetRayInfo,
-			sourceVariant,
-			targetVariant,
-			"Size",
-			Vector3.one
-		)
-
-		CancelHighResCastIfChanged(castID, targetRayInfo.Size, size)
-		CancelHighResCastIfChanged(castID, targetRayInfo.Radius, nil)
+		local size = sourceRayInfo.Size
+		if size == oldRayInfoSize and sourceVariant.Size ~= oldVariantSize then
+			size = sourceVariant.Size
+		end
+		size = size or sourceVariant.Size or Vector3.one
 
 		variant.Size = size
 		variant.Radius = nil
 		targetRayInfo.Size = size
 		targetRayInfo.Radius = nil
+		targetCast.Type = EnumCastTypes.Blockcast
 	elseif castType == EnumCastTypes.Spherecast then
-		local radius = ResolveShapeValue(
-			sourceRayInfo,
-			targetRayInfo,
-			sourceVariant,
-			targetVariant,
-			"Radius",
-			0.5
-		)
-
-		CancelHighResCastIfChanged(castID, targetRayInfo.Radius, radius)
-		CancelHighResCastIfChanged(castID, targetRayInfo.Size, nil)
+		local radius = sourceRayInfo.Radius
+		if radius == oldRayInfoRadius and sourceVariant.Radius ~= oldVariantRadius then
+			radius = sourceVariant.Radius
+		end
+		radius = radius or sourceVariant.Radius or 0.5
 
 		variant.Radius = radius
 		variant.Size = nil
 		targetRayInfo.Radius = radius
 		targetRayInfo.Size = nil
+		targetCast.Type = EnumCastTypes.Spherecast
 	else
-		CancelHighResCastIfChanged(castID, targetRayInfo.Size, nil)
-		CancelHighResCastIfChanged(castID, targetRayInfo.Radius, nil)
-
 		variant.Size = nil
 		variant.Radius = nil
 		targetRayInfo.Size = nil
 		targetRayInfo.Radius = nil
+		targetCast.Type = EnumCastTypes.Raycast
 	end
 
 	targetCast.CastVariant = variant
-end
 
-local function SyncCastData(sourceCast: any, targetCast: any)
-	local sourceState = sourceCast.StateInfo
-	local targetState = targetCast.StateInfo
-	local targetTrajectory = targetState.Trajectory
-
-	-- Keep the trajectory table stable because the simulator caches its reference.
-	if SyncFields(sourceState.Trajectory, targetTrajectory) then
-		ParallelSimulation.CancelHighResCast(targetCast.ID)
-	end
-
-	SyncFields(sourceState, targetState, PreservedStateFields)
-	targetState.Trajectory = targetTrajectory
-
-	-- Resolve shape fields separately so RayInfo copying cannot hide CastVariant edits.
-	SyncFields(sourceCast.RayInfo, targetCast.RayInfo, PreservedShapeFields)
-	SyncFields(sourceCast, targetCast, PreservedCastFields)
-
-	if sourceCast.UserData ~= targetCast.UserData then
-		targetCast.UserData = sourceCast.UserData
-	end
-
-	SyncCastVariant(sourceCast, targetCast)
+	return trajectoryChanged
+		or oldCastType ~= castType
+		or oldVariantSize ~= variant.Size
+		or oldVariantRadius ~= variant.Radius
+		or oldParameters ~= targetRayInfo.Parameters
+		or oldWorldRoot ~= targetRayInfo.WorldRoot
+		or oldMaxDistance ~= targetRayInfo.MaxDistance
+		or oldHighFidelityBehavior ~= targetState.HighFidelityBehavior
+		or oldHighFidelitySegmentSize ~= targetState.HighFidelitySegmentSize
+		or oldFastCastEventsConfig ~= targetState.FastCastEventsConfig
+		or oldFastCastEventsModuleConfig ~= targetState.FastCastEventsModuleConfig
+		or oldEventModule ~= targetRayInfo.FastCastEventsModule
 end
 
 local BaseCastInitialized = false
@@ -295,8 +301,12 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				end
 			else
 				local previousCosmetic = TargetCast.RayInfo.CosmeticBulletObject
-				SyncCastData(cast, TargetCast)
+				local cancelResimulation = SyncCastData(cast, TargetCast)
 				ParallelSimulation.SyncCast(TargetCast, previousCosmetic)
+
+				if cancelResimulation then
+					ParallelSimulation.CancelHighResCast(ID)
+				end
 			end
 
 			if cancelHighResCast then
