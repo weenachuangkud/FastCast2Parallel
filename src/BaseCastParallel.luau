@@ -76,6 +76,23 @@ local PreservedCastFields = {
 	CFrame = true,
 }
 
+local function NormalizeCastType(castType: any, fallback: number): number
+	if castType == "Raycast" then
+		return EnumCastTypes.Raycast
+	elseif castType == "Blockcast" then
+		return EnumCastTypes.Blockcast
+	elseif castType == "Spherecast" then
+		return EnumCastTypes.Spherecast
+	elseif castType == EnumCastTypes.Raycast
+		or castType == EnumCastTypes.Blockcast
+		or castType == EnumCastTypes.Spherecast
+	then
+		return castType
+	end
+
+	return fallback
+end
+
 -- Preserve the trajectory table because ParallelSimulation caches its reference.
 local function SyncTrajectoryChanges(sourceTrajectory: any, targetTrajectory: any): boolean
 	local changed = false
@@ -173,9 +190,11 @@ local function SyncCastData(sourceCast: any, targetCast: any)
 	local sourceVariant = sourceCast.CastVariant
 	local castType = sourceVariant.CastType
 	if sourceCast.Type ~= oldCastType then
-		castType = sourceCast.Type
+		castType = NormalizeCastType(sourceCast.Type, sourceVariant.CastType)
 	elseif sourceVariant.CastType ~= oldVariantType then
-		castType = sourceVariant.CastType
+		castType = NormalizeCastType(sourceVariant.CastType, oldVariantType)
+	else
+		castType = NormalizeCastType(castType, oldVariantType)
 	end
 
 	local variant = table.clone(sourceVariant)
