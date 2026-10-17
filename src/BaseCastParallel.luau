@@ -52,19 +52,77 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 	table.clear(cast :: any)
 end
 
--- Keep the worker's trajectory table because ParallelSimulation caches its reference.
--- SyncChangesToCast updates trajectory fields and UserData, while runtime and distance
--- remain owned by the worker and must not be overwritten by a stale cast snapshot.
-local function SyncTrajectoryChanges(sourceState: any, targetState: any)
-	local sourceTrajectory = sourceState.Trajectory
-	local targetTrajectory = targetState.Trajectory
+-- Only fields listed here are copied from the source cast to the worker cast.
+-- Runtime, distance, resimulation state, and CFrame remain worker-owned.
+local MutableCastFields = {
+	UserData = true,
+	Type = true,
 
-	targetTrajectory.StartTime = sourceTrajectory.StartTime
-	targetTrajectory.EndTime = sourceTrajectory.EndTime
-	targetTrajectory.Origin = sourceTrajectory.Origin
-	targetTrajectory.InitialVelocity = sourceTrajectory.InitialVelocity
-	targetTrajectory.Acceleration = sourceTrajectory.Acceleration
-end
+	StateInfo = {
+		IsPaused = true,
+		MaxLifetime = true,
+		HighFidelitySegmentSize = true,
+		HighFidelityBehavior = true,
+		VisualizeCasts = true,
+
+		Trajectory = {
+			StartTime = true,
+			EndTime = true,
+			Origin = true,
+			InitialVelocity = true,
+			Acceleration = true,
+		},
+
+		FastCastEventsConfig = {
+			UseLengthChanged = true,
+			UseHit = true,
+			UsePierced = true,
+			UseCastTerminating = true,
+			UseCanPierce = true,
+			UseCastFire = true,
+		},
+
+		FastCastEventsModuleConfig = {
+			UseLengthChanged = true,
+			UseHit = true,
+			UsePierced = true,
+			UseCastTerminating = true,
+			UseCanPierce = true,
+			UseCastFire = true,
+			UseOnStep = true,
+		},
+
+		VisualizeCastSettings = {
+			Debug_SegmentColor = true,
+			Debug_SegmentTransparency = true,
+			Debug_SegmentSize = true,
+			Debug_HitColor = true,
+			Debug_HitTransparency = true,
+			Debug_HitSize = true,
+			Debug_RayPierceColor = true,
+			Debug_RayPierceTransparency = true,
+			Debug_RayPierceSize = true,
+			Debug_RayLifetime = true,
+			Debug_HitLifetime = true,
+		},
+	},
+
+	RayInfo = {
+		Parameters = true,
+		WorldRoot = true,
+		MaxDistance = true,
+		CosmeticBulletObject = true,
+		FastCastEventsModule = true,
+		Size = true,
+		Radius = true,
+	},
+
+	CastVariant = {
+		CastType = true,
+		Size = true,
+		Radius = true,
+	},
+}
 
 local BaseCastInitialized = false
 local BaseCastInstance = nil
@@ -115,8 +173,35 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 					TargetCast.StateInfo.IsPaused = cast.StateInfo.IsPaused
 				end
 			else
-				SyncTrajectoryChanges(cast.StateInfo, TargetCast.StateInfo)
+				local previousCosmetic = TargetCast.RayInfo.CosmeticBulletObject
+
+				for i, v in cast do
+					local mutable = MutableCastFields[i]
+					if mutable == true then
+						TargetCast[i] = v
+					elseif type(mutable) == "table" and type(v) == "table" and type(TargetCast[i]) == "table" then
+						for k, nestedMutable in mutable do
+							local sourceValue = v[k]
+							if nestedMutable == true then
+								TargetCast[i][k] = sourceValue
+							elseif type(nestedMutable) == "table"
+								and type(sourceValue) == "table"
+								and type(TargetCast[i][k]) == "table"
+							then
+								for tk, fieldMutable in nestedMutable do
+									if fieldMutable == true then
+										TargetCast[i][k][tk] = sourceValue[tk]
+									end
+								end
+							end
+						end
+					end
+				end
+
+				-- UserData may be nil, in which case it isn't present in the source
+				-- table iteration above.
 				TargetCast.UserData = cast.UserData
+				ParallelSimulation.SyncCast(TargetCast, previousCosmetic)
 			end
 
 			if cancelHighResCast then
