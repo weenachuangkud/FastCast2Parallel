@@ -153,14 +153,23 @@ local function ResolveShapeValue(
 	return sourceInfoValue or sourceVariantValue or fallback
 end
 
-local function SyncCastVariant(sourceCast: any, targetCast: any): boolean
+local function CancelHighResCastIfChanged(castID: number, oldValue: any, newValue: any)
+	if oldValue ~= newValue then
+		ParallelSimulation.CancelHighResCast(castID)
+	end
+end
+
+local function SyncCastVariant(sourceCast: any, targetCast: any)
+	local castID = targetCast.ID
 	local sourceRayInfo = sourceCast.RayInfo
 	local targetRayInfo = targetCast.RayInfo
 	local sourceVariant = sourceCast.CastVariant
 	local targetVariant = targetCast.CastVariant
 	local castType = ResolveCastType(sourceCast, targetCast)
 	local variant = table.clone(sourceVariant)
-	local changed = targetCast.Type ~= castType or targetVariant.CastType ~= castType
+
+	CancelHighResCastIfChanged(castID, targetCast.Type, castType)
+	CancelHighResCastIfChanged(castID, targetVariant.CastType, castType)
 
 	variant.CastType = castType
 	targetCast.Type = castType
@@ -174,8 +183,9 @@ local function SyncCastVariant(sourceCast: any, targetCast: any): boolean
 			"Size",
 			Vector3.one
 		)
-		changed = changed or targetRayInfo.Size ~= size or targetRayInfo.Radius ~= nil
-			or targetVariant.Size ~= size or targetVariant.Radius ~= nil
+
+		CancelHighResCastIfChanged(castID, targetRayInfo.Size, size)
+		CancelHighResCastIfChanged(castID, targetRayInfo.Radius, nil)
 
 		variant.Size = size
 		variant.Radius = nil
@@ -190,16 +200,17 @@ local function SyncCastVariant(sourceCast: any, targetCast: any): boolean
 			"Radius",
 			0.5
 		)
-		changed = changed or targetRayInfo.Radius ~= radius or targetRayInfo.Size ~= nil
-			or targetVariant.Radius ~= radius or targetVariant.Size ~= nil
+
+		CancelHighResCastIfChanged(castID, targetRayInfo.Radius, radius)
+		CancelHighResCastIfChanged(castID, targetRayInfo.Size, nil)
 
 		variant.Radius = radius
 		variant.Size = nil
 		targetRayInfo.Radius = radius
 		targetRayInfo.Size = nil
 	else
-		changed = changed or targetRayInfo.Size ~= nil or targetRayInfo.Radius ~= nil
-			or targetVariant.Size ~= nil or targetVariant.Radius ~= nil
+		CancelHighResCastIfChanged(castID, targetRayInfo.Size, nil)
+		CancelHighResCastIfChanged(castID, targetRayInfo.Radius, nil)
 
 		variant.Size = nil
 		variant.Radius = nil
@@ -208,29 +219,30 @@ local function SyncCastVariant(sourceCast: any, targetCast: any): boolean
 	end
 
 	targetCast.CastVariant = variant
-	return changed
 end
 
-local function SyncCastData(sourceCast: any, targetCast: any): boolean
+local function SyncCastData(sourceCast: any, targetCast: any)
 	local sourceState = sourceCast.StateInfo
 	local targetState = targetCast.StateInfo
 	local targetTrajectory = targetState.Trajectory
-	local changed = SyncFields(sourceState, targetState, PreservedStateFields)
 
 	-- Keep the trajectory table stable because the simulator caches its reference.
-	changed = SyncFields(sourceState.Trajectory, targetTrajectory) or changed
+	if SyncFields(sourceState.Trajectory, targetTrajectory) then
+		ParallelSimulation.CancelHighResCast(targetCast.ID)
+	end
+
+	SyncFields(sourceState, targetState, PreservedStateFields)
 	targetState.Trajectory = targetTrajectory
 
 	-- Resolve shape fields separately so RayInfo copying cannot hide CastVariant edits.
-	changed = SyncFields(sourceCast.RayInfo, targetCast.RayInfo, PreservedShapeFields) or changed
-	changed = SyncFields(sourceCast, targetCast, PreservedCastFields) or changed
+	SyncFields(sourceCast.RayInfo, targetCast.RayInfo, PreservedShapeFields)
+	SyncFields(sourceCast, targetCast, PreservedCastFields)
 
 	if sourceCast.UserData ~= targetCast.UserData then
 		targetCast.UserData = sourceCast.UserData
-		changed = true
 	end
 
-	return SyncCastVariant(sourceCast, targetCast) or changed
+	SyncCastVariant(sourceCast, targetCast)
 end
 
 local BaseCastInitialized = false
@@ -283,12 +295,8 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 				end
 			else
 				local previousCosmetic = TargetCast.RayInfo.CosmeticBulletObject
-				local castChanged = SyncCastData(cast, TargetCast)
+				SyncCastData(cast, TargetCast)
 				ParallelSimulation.SyncCast(TargetCast, previousCosmetic)
-
-				if castChanged then
-					ParallelSimulation.CancelHighResCast(ID)
-				end
 			end
 
 			if cancelHighResCast then
