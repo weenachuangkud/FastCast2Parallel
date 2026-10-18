@@ -481,6 +481,7 @@ local FireBatches = {}
 local FireUsed = {}
 local FireFlushConnection: RBXScriptConnection? = nil
 local ParallelDispatcher = nil
+local DispatcherClone: ModuleScript? = nil
 
 local function QueueFire(request: { any })
 	FireQueue[#FireQueue + 1] = request
@@ -578,6 +579,7 @@ function FastCast.Init(
 	local dispatcherClone = DispatcherModule:Clone()
 	dispatcherClone.Parent = PARALLEL_PARENT
 	dispatcherClone.Name = DISPATCHER_NAME
+	DispatcherClone = dispatcherClone
 
 	local newDispatcher: Dispatcher.Dispatcher = require(dispatcherClone) :: Dispatcher.Dispatcher
 	newDispatcher.Init(PARALLEL_PARENT, VM_CONTAINER_NAME, VM_NAME)
@@ -620,6 +622,54 @@ function FastCast.Init(
 	end
 
 	RuntimeInitialized = true
+end
+
+-- Recreate the shared Actor pool. This is only safe once every caster has
+-- been destroyed, because all casts use this one pool.
+function FastCast.ReconfigureWorkers(numWorkers: number): boolean
+	assert(type(numWorkers) == "number" and numWorkers >= 1 and numWorkers <= 32 and numWorkers % 1 == 0,
+		"numWorkers must be an integer from 1 to 32")
+
+	if not RuntimeInitialized then
+		return false
+	end
+
+	local currentWorkerCount = ParallelDispatcher and #ParallelDispatcher.Threads or 0
+	if currentWorkerCount == numWorkers then
+		return false
+	end
+
+	local casterDeadline = os.clock() + 5
+	while next(CasterRegistry) ~= nil and os.clock() < casterDeadline do
+		task.wait()
+	end
+	assert(next(CasterRegistry) == nil, "Cannot resize FastCast2 actors while another caster is active")
+
+	local dispatcher = ParallelDispatcher
+	local dispatcherClone = DispatcherClone
+	assert(dispatcher and dispatcherClone, "Parallel runtime is missing its dispatcher")
+
+	if FireFlushConnection then
+		FireFlushConnection:Disconnect()
+		FireFlushConnection = nil
+	end
+	table.clear(FireQueue)
+	table.clear(FireBatches)
+	table.clear(FireUsed)
+
+	RuntimeInitialized = false
+	ParallelDispatcher = nil
+	DispatcherClone = nil
+	dispatcher:Destroy(true)
+
+	local destroyDeadline = os.clock() + 5
+	while dispatcherClone.Parent ~= nil and os.clock() < destroyDeadline do
+		task.wait()
+	end
+	assert(dispatcherClone.Parent == nil, "Timed out while shutting down the FastCast2 Actor pool")
+
+	FastCast.Init(numWorkers, RuntimeMovementMode, DefaultFastCastEventsModule)
+	return true
 end
 
 --[=[
