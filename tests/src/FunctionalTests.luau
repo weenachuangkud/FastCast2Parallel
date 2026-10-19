@@ -179,7 +179,7 @@ return function()
 			end)
 		end),
 
-		Framework.describe("FastCast — Serial coverage", function(test)
+		Framework.describe("FastCast — Shared API coverage", function(test)
 			registerParallelCastTypes(test)
 			test("RaycastParams filters the first wall and hits the next", function(expect)
 				local arena = createArena()
@@ -545,8 +545,8 @@ return function()
 
 		end),
 
-		Framework.describe("FastCast — Parallel-only coverage", function(test)
-			-- These tests cover behavior specific to Parallel, beyond the Serial baseline.
+		Framework.describe("FastCast — Parallel-specific coverage", function(test)
+			-- Mark the start of tests that cover Parallel-specific behavior.
 			print("FASTCAST2 PARALLEL-ONLY TESTS")
 			test("initializes shared runtime and creates casters", function(expect)
 				FastCast.Init(2, "BulkMoveTo")
