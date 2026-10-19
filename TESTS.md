@@ -16,7 +16,7 @@ The runner builds a Rojo place, runs it in Roblox Studio through `run-in-roblox`
 
 The functional suite is organized into two sections. Both exercise the **Parallel implementation**; the shared API section is based on the Serial test coverage and adapted for Parallel's worker-based execution model.
 
-### Shared API coverage
+### API coverage
 
 - [ ] Initialize, create, and destroy casters.
 - [ ] Fire Raycast, Blockcast, and Spherecast casts; confirm each reaches a target and terminates.
