@@ -336,6 +336,159 @@ return function()
 				casterB:Destroy()
 			end)
 
+
+			test("RaycastParams filters the first wall and hits the next", function(expect)
+				local arena = createArena()
+				local ignoredWall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				params.FilterDescendantsInstances = { container, ignoredWall }
+				behavior.RaycastParams = params
+
+				local hitInstance = nil
+				local caster = createParallelCaster({
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+				})
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(Framework.waitFor(function()
+					return hitInstance ~= nil
+				end, HIT_TIMEOUT), "filtered cast never hit a wall")
+				expect.equal(hitInstance, targetWall, "RaycastParams did not exclude the first wall")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("MaxDistance terminates without reporting a hit", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxDistance = 15
+
+				local hitCount = 0
+				local terminationCount = 0
+				local caster = createParallelCaster({
+					Hit = function()
+						hitCount += 1
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				})
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+
+				expect.truthy(Framework.waitFor(function()
+					return terminationCount > 0
+				end, HIT_TIMEOUT), "cast did not terminate at MaxDistance")
+				task.wait(0.1)
+				expect.equal(hitCount, 0, "MaxDistance termination incorrectly reported a hit")
+				expect.equal(terminationCount, 1, "MaxDistance termination fired more than once")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("cosmetic template is cloned into its container and ignored by its own cast", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local template = Instance.new("Part")
+				template.Name = "CosmeticTemplate"
+				template.Anchored = true
+				template.CanCollide = false
+				template.CanQuery = true
+				template.Parent = arena
+
+				local targetWall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local behavior = makeBehavior(container)
+				behavior.CosmeticBulletTemplate = template
+				behavior.CosmeticBulletContainer = container
+				behavior.AutoIgnoreContainer = true
+
+				local hitInstance = nil
+				local caster = createParallelCaster({
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+				})
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(Framework.waitFor(function()
+					return hitInstance ~= nil
+				end, HIT_TIMEOUT), "cast with cosmetic template never hit")
+				expect.equal(hitInstance, targetWall, "cast hit its cosmetic projectile instead of the wall")
+				expect.equal(#container:GetChildren(), 1, "cosmetic template was not cloned into its container")
+				expect.truthy(container:GetChildren()[1] ~= template, "cosmetic projectile reused the template")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("CloneTemplate false uses the supplied cosmetic instance", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local template = Instance.new("Part")
+				template.Name = "CosmeticInstance"
+				template.Anchored = true
+				template.CanCollide = false
+				template.Parent = arena
+
+				local behavior = makeBehavior(container)
+				behavior.CosmeticBulletTemplate = template
+				behavior.CosmeticBulletContainer = container
+				behavior.CloneTemplate = false
+
+				local caster = createParallelCaster()
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return template.Parent == container
+				end, HIT_TIMEOUT), "supplied cosmetic instance was not moved into the container")
+				expect.equal(#container:GetChildren(), 1, "CloneTemplate false unexpectedly created a clone")
+				expect.equal(container:GetChildren()[1], template, "supplied cosmetic instance was not reused")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("event configuration can disable callback channels", function(expect)
+				local arena = createArena()
+				createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.FastCastEventsConfig.UseHit = false
+				behavior.FastCastEventsConfig.UseCastFire = false
+				behavior.FastCastEventsConfig.UseCastTerminating = false
+
+				local hitCount = 0
+				local castFireCount = 0
+				local terminationCount = 0
+				local caster = createParallelCaster({
+					Hit = function()
+						hitCount += 1
+					end,
+					CastFire = function()
+						castFireCount += 1
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				})
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				task.wait(0.5)
+
+				expect.equal(hitCount, 0, "disabled Hit callback still fired")
+				expect.equal(castFireCount, 0, "disabled CastFire callback still fired")
+				expect.equal(terminationCount, 0, "disabled CastTerminating callback still fired")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("movement mode can be switched", function(expect)
 				local caster = createParallelCaster()
 				caster:SetMovementModeEnabled(true, "Motor6D")
