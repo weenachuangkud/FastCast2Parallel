@@ -129,15 +129,53 @@ return function()
 		Framework.describe("FastCastBehavior", function(test)
 			test("newBehavior returns the documented defaults", function(expect)
 				local behavior = FastCast.newBehavior()
+				local events = behavior.FastCastEventsConfig
+				local moduleEvents = behavior.FastCastEventsModuleConfig
 
 				expect.equal(behavior.MaxDistance, 1000, "MaxDistance default changed")
+				expect.equal(behavior.MaxLifetime, nil, "MaxLifetime should be unlimited by default")
 				expect.near(behavior.Acceleration, Vector3.zero, 1e-6, "Acceleration default changed")
 				expect.equal(
 					behavior.HighFidelityBehavior,
 					FastCastEnums.HighFidelityBehavior.Default,
 					"HighFidelityBehavior default changed"
 				)
+				expect.equal(behavior.HighFidelitySegmentSize, 0.5, "HighFidelitySegmentSize default changed")
+				expect.equal(behavior.CosmeticBulletTemplate, nil, "CosmeticBulletTemplate default changed")
+				expect.equal(behavior.CosmeticBulletContainer, nil, "CosmeticBulletContainer default changed")
 				expect.equal(behavior.AutoIgnoreContainer, true, "AutoIgnoreContainer default changed")
+				expect.equal(behavior.CloneTemplate, true, "CloneTemplate should be enabled by default")
+				expect.equal(behavior.VisualizeCasts, false, "VisualizeCasts should be disabled by default")
+				expect.equal(type(behavior.VisualizeCastSettings), "table", "visualization settings are missing")
+				expect.equal(events.UseLengthChanged, false, "LengthChanged should be opt-in")
+				expect.equal(events.UseHit, true, "Hit should be enabled by default")
+				expect.equal(events.UsePierced, true, "Pierced should be enabled by default")
+				expect.equal(events.UseCastTerminating, true, "CastTerminating should be enabled by default")
+				expect.equal(events.UseCanPierce, true, "CanPierce should be enabled by default")
+				expect.equal(events.UseCastFire, true, "CastFire should be enabled by default")
+				expect.equal(moduleEvents.UseLengthChanged, false, "module LengthChanged should be opt-in")
+				expect.equal(moduleEvents.UseHit, true, "module Hit should be enabled by default")
+				expect.equal(moduleEvents.UsePierced, true, "module Pierced should be enabled by default")
+				expect.equal(moduleEvents.UseCastTerminating, true, "module CastTerminating should be enabled by default")
+				expect.equal(moduleEvents.UseCanPierce, true, "module CanPierce should be enabled by default")
+				expect.equal(moduleEvents.UseCastFire, true, "module CastFire should be enabled by default")
+				expect.equal(moduleEvents.UseOnStep, false, "module OnStep should be opt-in")
+			end)
+
+			test("newBehavior returns independent nested configuration", function(expect)
+				local first = FastCast.newBehavior()
+				local second = FastCast.newBehavior()
+
+				first.FastCastEventsConfig.UseHit = false
+				first.FastCastEventsModuleConfig.UseHit = false
+				first.VisualizeCastSettings.Debug_SegmentSize = 99
+
+				expect.equal(second.FastCastEventsConfig.UseHit, true, "event config was shared between behaviors")
+				expect.equal(second.FastCastEventsModuleConfig.UseHit, true, "module event config was shared between behaviors")
+				expect.truthy(
+					second.VisualizeCastSettings.Debug_SegmentSize ~= 99,
+					"visualization settings were shared between behaviors"
+				)
 			end)
 		end),
 
@@ -151,6 +189,64 @@ return function()
 			end)
 
 			registerParallelCastTypes(test)
+
+			test("CastFire exposes documented data for all cast variants", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxLifetime = 3
+				behavior.HighFidelitySegmentSize = 0.25
+				behavior.UserData = { TestTag = "parallel" }
+
+				local received = {}
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						received[cast.Type] = cast
+					end,
+				})
+				for _, castType in CAST_TYPES do
+					fire(caster, castType, Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				end
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return received[FastCast.CastType.Raycast]
+							and received[FastCast.CastType.Blockcast]
+							and received[FastCast.CastType.Spherecast]
+					end, HIT_TIMEOUT),
+					"CastFire did not expose all three cast variants"
+				)
+
+				for _, castType in CAST_TYPES do
+					local cast = received[FastCast.CastType[castType]]
+					expect.truthy(cast, castType .. " cast data was missing")
+					expect.equal(cast.CasterId, caster.CasterId, castType .. " CasterId was wrong")
+					expect.equal(cast.Type, FastCast.CastType[castType], castType .. " type was wrong")
+					expect.equal(type(cast.ID), "number", castType .. " cast ID was not numeric")
+					expect.equal(cast.StateInfo.Trajectory.Origin, Vector3.zero, castType .. " origin was wrong")
+					expect.equal(
+						cast.StateInfo.Trajectory.InitialVelocity,
+						Vector3.new(0, 0, -120),
+						castType .. " initial velocity was wrong"
+					)
+					expect.equal(cast.StateInfo.Trajectory.Acceleration, behavior.Acceleration, castType .. " acceleration was wrong")
+					expect.equal(cast.StateInfo.MaxLifetime, behavior.MaxLifetime, castType .. " MaxLifetime was not copied")
+					expect.equal(cast.StateInfo.HighFidelitySegmentSize, 0.25, castType .. " segment size was not copied")
+					expect.equal(cast.UserData.TestTag, "parallel", castType .. " UserData was not copied")
+					expect.equal(cast.RayInfo.WorldRoot, workspace, castType .. " WorldRoot was wrong")
+					expect.equal(cast.RayInfo.MaxDistance, behavior.MaxDistance, castType .. " MaxDistance was wrong")
+					expect.equal(typeof(cast.RayInfo.Parameters), "RaycastParams", castType .. " RaycastParams was missing")
+					if castType == "Blockcast" then
+						expect.equal(cast.RayInfo.Size, Vector3.one, "Blockcast size was not exposed")
+					elseif castType == "Spherecast" then
+						expect.equal(cast.RayInfo.Radius, 0.5, "Spherecast radius was not exposed")
+					end
+					FastCast:TerminateCast(cast)
+				end
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
 
 			test("one caster can fire again after its first shot terminates", function(expect)
 				local arena = createArena()
