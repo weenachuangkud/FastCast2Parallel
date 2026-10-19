@@ -20,12 +20,13 @@ The functional suite is organized into two sections. Both exercise the **Paralle
 
 - [ ] Initialize, create, and destroy casters.
 - [ ] Fire Raycast, Blockcast, and Spherecast casts; confirm each reaches a target and terminates.
-- [ ] Verify public event callbacks and multiple Signal listeners.
+- [ ] Verify enabled public event callbacks and multiple Signal listeners.
+- [ ] Set individual options in `FastCastEventsConfig` to `false` and confirm the corresponding callbacks do not fire.
+- [ ] Set `FastCastEventsConfig.UseLengthChanged = true` and confirm `LengthChanged` fires as the cast moves.
 - [ ] Check behavior defaults and independent nested configuration.
 - [ ] Switch movement mode and manipulate active cast position, velocity, and acceleration.
 - [ ] Verify `RaycastParams` filtering and `MaxDistance` termination without a hit.
 - [ ] Verify cosmetic template cloning, `CloneTemplate = false`, and ignoring the cosmetic container.
-- [ ] Verify event configuration can disable callback channels.
 - [ ] Exercise high-fidelity hit resolution and maximum-distance termination.
 - [ ] Verify `MaxLifetime`, including zero lifetime, and pause/resume behavior.
 
