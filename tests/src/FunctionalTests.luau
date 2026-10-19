@@ -125,8 +125,6 @@ local function registerParallelCastTypes(test: (string, any) -> ())
 end
 
 return function()
-	print("FASTCAST2 PARALLEL TESTS STUFFS ETC")
-
 	return {
 		Framework.describe("FastCastBehavior", function(test)
 			test("newBehavior returns the documented defaults", function(expect)
@@ -181,162 +179,8 @@ return function()
 			end)
 		end),
 
-		Framework.describe("FastCast", function(test)
-			test("initializes shared runtime and creates casters", function(expect)
-				FastCast.Init(2, "BulkMoveTo")
-				local caster = createParallelCaster()
-				expect.equal(type(caster.CasterId), "number", "caster did not receive a numeric ID")
-
-				caster:Destroy()
-			end)
-
+		Framework.describe("FastCast — Serial coverage", function(test)
 			registerParallelCastTypes(test)
-
-			test("CastFire exposes documented data for all cast variants", function(expect)
-				local arena = createArena()
-				local container = createContainer(arena)
-				local behavior = makeBehavior(container)
-				behavior.MaxLifetime = 3
-				behavior.HighFidelitySegmentSize = 0.25
-				behavior.UserData = { TestTag = "parallel" }
-
-				local received = {}
-				local caster = createParallelCaster({
-					CastFire = function(cast)
-						received[cast.Type] = cast
-					end,
-				})
-				for _, castType in CAST_TYPES do
-					fire(caster, castType, Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
-				end
-
-				expect.truthy(
-					Framework.waitFor(function()
-						return received[FastCast.CastType.Raycast]
-							and received[FastCast.CastType.Blockcast]
-							and received[FastCast.CastType.Spherecast]
-					end, HIT_TIMEOUT),
-					"CastFire did not expose all three cast variants"
-				)
-
-				for _, castType in CAST_TYPES do
-					local cast = received[FastCast.CastType[castType]]
-					expect.truthy(cast, castType .. " cast data was missing")
-					expect.equal(cast.CasterId, caster.CasterId, castType .. " CasterId was wrong")
-					expect.equal(cast.Type, FastCast.CastType[castType], castType .. " type was wrong")
-					expect.equal(type(cast.ID), "number", castType .. " cast ID was not numeric")
-					expect.equal(cast.StateInfo.Trajectory.Origin, Vector3.zero, castType .. " origin was wrong")
-					expect.equal(
-						cast.StateInfo.Trajectory.InitialVelocity,
-						Vector3.new(0, 0, -120),
-						castType .. " initial velocity was wrong"
-					)
-					expect.equal(cast.StateInfo.Trajectory.Acceleration, behavior.Acceleration, castType .. " acceleration was wrong")
-					expect.equal(cast.StateInfo.MaxLifetime, behavior.MaxLifetime, castType .. " MaxLifetime was not copied")
-					expect.equal(cast.StateInfo.HighFidelitySegmentSize, 0.25, castType .. " segment size was not copied")
-					expect.equal(cast.UserData.TestTag, "parallel", castType .. " UserData was not copied")
-					expect.equal(cast.RayInfo.WorldRoot, workspace, castType .. " WorldRoot was wrong")
-					expect.equal(cast.RayInfo.MaxDistance, behavior.MaxDistance, castType .. " MaxDistance was wrong")
-					expect.equal(typeof(cast.RayInfo.Parameters), "RaycastParams", castType .. " RaycastParams was missing")
-					if castType == "Blockcast" then
-						expect.equal(cast.RayInfo.Size, Vector3.one, "Blockcast size was not exposed")
-					elseif castType == "Spherecast" then
-						expect.equal(cast.RayInfo.Radius, 0.5, "Spherecast radius was not exposed")
-					end
-					FastCast:TerminateCast(cast)
-				end
-
-				caster:Destroy()
-				arena:Destroy()
-			end)
-
-			test("one caster can fire again after its first shot terminates", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
-				local container = createContainer(arena)
-				local behavior = makeBehavior(container)
-
-				local castFireCount = 0
-				local hitCount = 0
-				local caster = createParallelCaster({
-					CastFire = function()
-						castFireCount += 1
-					end,
-					Hit = function(_, result)
-						if result.Instance == wall then
-							hitCount += 1
-						end
-					end,
-				})
-
-				-- Let the first shot finish before queueing more shots on the same caster.
-				caster:RaycastFire(Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
-				expect.truthy(
-					Framework.waitFor(function()
-						return castFireCount == 1 and hitCount == 1
-					end, HIT_TIMEOUT),
-					"the first shot did not fire and hit"
-				)
-
-				-- Fire repeatedly after a completed cast, including several requests in one frame.
-				for _ = 2, 5 do
-					caster:RaycastFire(Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
-				end
-
-				expect.truthy(
-					Framework.waitFor(function()
-						return castFireCount == 5 and hitCount == 5
-					end, HIT_TIMEOUT),
-					"subsequent shots were not all dispatched and hit the wall"
-				)
-				expect.equal(castFireCount, 5, "the same caster did not dispatch all five shots")
-				expect.equal(hitCount, 5, "the same caster did not register all five hits")
-
-				caster:Destroy()
-				arena:Destroy()
-			end)
-
-			test("multiple casters share runtime and route events by CasterId", function(expect)
-				local casterAId = nil
-				local casterBId = nil
-				local casterA = createParallelCaster({
-					CastFire = function(cast)
-						casterAId = cast.CasterId
-					end,
-				})
-				local casterB = createParallelCaster({
-					CastFire = function(cast)
-						casterBId = cast.CasterId
-					end,
-				})
-
-				local behavior = FastCast.newBehavior()
-				casterA:RaycastFire(Vector3.zero, Vector3.yAxis, 50, behavior)
-				casterB:RaycastFire(Vector3.zero, Vector3.xAxis, 50, behavior)
-
-				expect.truthy(Framework.waitFor(function()
-					return casterAId ~= nil and casterBId ~= nil
-				end, HIT_TIMEOUT), "CastFire events were not routed to both casters")
-				expect.equal(casterAId, casterA.CasterId, "caster A received another caster's event")
-				expect.equal(casterBId, casterB.CasterId, "caster B received another caster's event")
-				expect.truthy(casterA.CasterId ~= casterB.CasterId, "casters shared the same numeric ID")
-
-				casterA:Destroy()
-				expect.truthy(Framework.waitFor(function()
-					return casterA.CasterId == nil
-				end, HIT_TIMEOUT), "destroying caster A did not finish")
-
-				casterBId = nil
-				casterB:RaycastFire(Vector3.zero, Vector3.zAxis, 50, behavior)
-				expect.truthy(Framework.waitFor(function()
-					return casterBId ~= nil
-				end, HIT_TIMEOUT), "destroying caster A stopped the shared runtime")
-				expect.equal(casterBId, casterB.CasterId, "caster B stopped receiving its own events")
-
-				casterB:Destroy()
-			end)
-
-
 			test("RaycastParams filters the first wall and hits the next", function(expect)
 				local arena = createArena()
 				local ignoredWall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
@@ -664,6 +508,201 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("events are Signals that support multiple listeners", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+
+				local firstCount = 0
+				local secondCount = 0
+
+				local caster = createParallelCaster()
+				caster.Hit:Connect(function(_, result)
+					if result.Instance == wall then
+						firstCount += 1
+					end
+				end)
+				caster.Hit:Connect(function(_, result)
+					if result.Instance == wall then
+						secondCount += 1
+					end
+				end)
+
+				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return firstCount > 0 and secondCount > 0
+					end, HIT_TIMEOUT),
+					"parallel Signal listeners never fired"
+				)
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+
+		end),
+
+		Framework.describe("FastCast — Parallel-only coverage", function(test)
+			-- These tests cover behavior specific to Parallel, beyond the Serial baseline.
+			print("FASTCAST2 PARALLEL-ONLY TESTS")
+			test("initializes shared runtime and creates casters", function(expect)
+				FastCast.Init(2, "BulkMoveTo")
+				local caster = createParallelCaster()
+				expect.equal(type(caster.CasterId), "number", "caster did not receive a numeric ID")
+
+				caster:Destroy()
+			end)
+
+			registerParallelCastTypes(test)
+
+			test("CastFire exposes documented data for all cast variants", function(expect)
+				local arena = createArena()
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxLifetime = 3
+				behavior.HighFidelitySegmentSize = 0.25
+				behavior.UserData = { TestTag = "parallel" }
+
+				local received = {}
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						received[cast.Type] = cast
+					end,
+				})
+				for _, castType in CAST_TYPES do
+					fire(caster, castType, Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				end
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return received[FastCast.CastType.Raycast]
+							and received[FastCast.CastType.Blockcast]
+							and received[FastCast.CastType.Spherecast]
+					end, HIT_TIMEOUT),
+					"CastFire did not expose all three cast variants"
+				)
+
+				for _, castType in CAST_TYPES do
+					local cast = received[FastCast.CastType[castType]]
+					expect.truthy(cast, castType .. " cast data was missing")
+					expect.equal(cast.CasterId, caster.CasterId, castType .. " CasterId was wrong")
+					expect.equal(cast.Type, FastCast.CastType[castType], castType .. " type was wrong")
+					expect.equal(type(cast.ID), "number", castType .. " cast ID was not numeric")
+					expect.equal(cast.StateInfo.Trajectory.Origin, Vector3.zero, castType .. " origin was wrong")
+					expect.equal(
+						cast.StateInfo.Trajectory.InitialVelocity,
+						Vector3.new(0, 0, -120),
+						castType .. " initial velocity was wrong"
+					)
+					expect.equal(cast.StateInfo.Trajectory.Acceleration, behavior.Acceleration, castType .. " acceleration was wrong")
+					expect.equal(cast.StateInfo.MaxLifetime, behavior.MaxLifetime, castType .. " MaxLifetime was not copied")
+					expect.equal(cast.StateInfo.HighFidelitySegmentSize, 0.25, castType .. " segment size was not copied")
+					expect.equal(cast.UserData.TestTag, "parallel", castType .. " UserData was not copied")
+					expect.equal(cast.RayInfo.WorldRoot, workspace, castType .. " WorldRoot was wrong")
+					expect.equal(cast.RayInfo.MaxDistance, behavior.MaxDistance, castType .. " MaxDistance was wrong")
+					expect.equal(typeof(cast.RayInfo.Parameters), "RaycastParams", castType .. " RaycastParams was missing")
+					if castType == "Blockcast" then
+						expect.equal(cast.RayInfo.Size, Vector3.one, "Blockcast size was not exposed")
+					elseif castType == "Spherecast" then
+						expect.equal(cast.RayInfo.Radius, 0.5, "Spherecast radius was not exposed")
+					end
+					FastCast:TerminateCast(cast)
+				end
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("one caster can fire again after its first shot terminates", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+
+				local castFireCount = 0
+				local hitCount = 0
+				local caster = createParallelCaster({
+					CastFire = function()
+						castFireCount += 1
+					end,
+					Hit = function(_, result)
+						if result.Instance == wall then
+							hitCount += 1
+						end
+					end,
+				})
+
+				-- Let the first shot finish before queueing more shots on the same caster.
+				caster:RaycastFire(Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return castFireCount == 1 and hitCount == 1
+					end, HIT_TIMEOUT),
+					"the first shot did not fire and hit"
+				)
+
+				-- Fire repeatedly after a completed cast, including several requests in one frame.
+				for _ = 2, 5 do
+					caster:RaycastFire(Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				end
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return castFireCount == 5 and hitCount == 5
+					end, HIT_TIMEOUT),
+					"subsequent shots were not all dispatched and hit the wall"
+				)
+				expect.equal(castFireCount, 5, "the same caster did not dispatch all five shots")
+				expect.equal(hitCount, 5, "the same caster did not register all five hits")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("multiple casters share runtime and route events by CasterId", function(expect)
+				local casterAId = nil
+				local casterBId = nil
+				local casterA = createParallelCaster({
+					CastFire = function(cast)
+						casterAId = cast.CasterId
+					end,
+				})
+				local casterB = createParallelCaster({
+					CastFire = function(cast)
+						casterBId = cast.CasterId
+					end,
+				})
+
+				local behavior = FastCast.newBehavior()
+				casterA:RaycastFire(Vector3.zero, Vector3.yAxis, 50, behavior)
+				casterB:RaycastFire(Vector3.zero, Vector3.xAxis, 50, behavior)
+
+				expect.truthy(Framework.waitFor(function()
+					return casterAId ~= nil and casterBId ~= nil
+				end, HIT_TIMEOUT), "CastFire events were not routed to both casters")
+				expect.equal(casterAId, casterA.CasterId, "caster A received another caster's event")
+				expect.equal(casterBId, casterB.CasterId, "caster B received another caster's event")
+				expect.truthy(casterA.CasterId ~= casterB.CasterId, "casters shared the same numeric ID")
+
+				casterA:Destroy()
+				expect.truthy(Framework.waitFor(function()
+					return casterA.CasterId == nil
+				end, HIT_TIMEOUT), "destroying caster A did not finish")
+
+				casterBId = nil
+				casterB:RaycastFire(Vector3.zero, Vector3.zAxis, 50, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return casterBId ~= nil
+				end, HIT_TIMEOUT), "destroying caster A stopped the shared runtime")
+				expect.equal(casterBId, casterB.CasterId, "caster B stopped receiving its own events")
+
+				casterB:Destroy()
+			end)
+
+
 			test("PauseCast and ResumeCast freeze and resume worker simulation", function(expect)
 				local arena = createArena()
 				local wall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
@@ -815,40 +854,6 @@ return function()
 				)
 
 				connection:Disconnect()
-				caster:Destroy()
-				arena:Destroy()
-			end)
-
-			test("events are Signals that support multiple listeners", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
-				local container = createContainer(arena)
-				local behavior = makeBehavior(container)
-
-				local firstCount = 0
-				local secondCount = 0
-
-				local caster = createParallelCaster()
-				caster.Hit:Connect(function(_, result)
-					if result.Instance == wall then
-						firstCount += 1
-					end
-				end)
-				caster.Hit:Connect(function(_, result)
-					if result.Instance == wall then
-						secondCount += 1
-					end
-				end)
-
-				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
-
-				expect.truthy(
-					Framework.waitFor(function()
-						return firstCount > 0 and secondCount > 0
-					end, HIT_TIMEOUT),
-					"parallel Signal listeners never fired"
-				)
-
 				caster:Destroy()
 				arena:Destroy()
 			end)
