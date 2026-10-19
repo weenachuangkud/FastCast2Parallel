@@ -2,7 +2,7 @@
 	FastCast2 functional tests.
 
 	These cover the checklist in TESTS.md: initialization, the three cast
-	variants, every public event, ObjectCache, movement modes, cast
+	variants, every public event, movement modes, cast
 	manipulation, and the parallel-only extensions.
 ]]
 
