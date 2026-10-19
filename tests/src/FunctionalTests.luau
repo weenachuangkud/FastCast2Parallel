@@ -125,6 +125,8 @@ local function registerParallelCastTypes(test: (string, any) -> ())
 end
 
 return function()
+	print("FASTCAST2 PARALLEL TESTS STUFFS ETC")
+
 	return {
 		Framework.describe("FastCastBehavior", function(test)
 			test("newBehavior returns the documented defaults", function(expect)
