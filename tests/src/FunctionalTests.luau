@@ -180,6 +180,14 @@ return function()
 		end),
 
 		Framework.describe("FastCast — Shared API coverage", function(test)
+			test("initializes shared runtime and creates casters", function(expect)
+				FastCast.Init(2, "BulkMoveTo")
+				local caster = createParallelCaster()
+				expect.equal(type(caster.CasterId), "number", "caster did not receive a numeric ID")
+
+				caster:Destroy()
+			end)
+
 			registerParallelCastTypes(test)
 			test("RaycastParams filters the first wall and hits the next", function(expect)
 				local arena = createArena()
@@ -548,14 +556,6 @@ return function()
 		Framework.describe("FastCast — Parallel-specific coverage", function(test)
 			-- Mark the start of tests that cover Parallel-specific behavior.
 			print("FASTCAST2 PARALLEL-ONLY TESTS")
-			test("initializes shared runtime and creates casters", function(expect)
-				FastCast.Init(2, "BulkMoveTo")
-				local caster = createParallelCaster()
-				expect.equal(type(caster.CasterId), "number", "caster did not receive a numeric ID")
-
-				caster:Destroy()
-			end)
-
 			registerParallelCastTypes(test)
 
 			test("CastFire exposes documented data for all cast variants", function(expect)
