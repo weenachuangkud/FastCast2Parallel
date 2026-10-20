@@ -90,11 +90,11 @@ actor:BindToMessage("SetMovementModeEnabled", function(enabled: boolean, mode: "
 end)
 
 actor:BindToMessage("StopSimulation", function()
-	require(script.Parent.Parent:WaitForChild("ParallelSimulation")).Stop()
+	BaseCast:StopSimulation()
 end)
 
 actor:BindToMessage("StartSimulation", function()
-	require(script.Parent.Parent:WaitForChild("ParallelSimulation")).Start()
+	BaseCast:StartSimulation()
 end)
 
 actor:BindToMessage("DestroyCaster", function(casterId: number)
