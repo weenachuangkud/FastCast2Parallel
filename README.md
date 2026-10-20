@@ -78,6 +78,20 @@ FastCast2 is an open-source project, and contributions from the community are we
 
 ---
 
+## Runtime lifecycle
+
+`Init()` initializes the shared runtime on the first call and ensures simulation is running. Calling it again while running is safe; after `Stop()`, calling `Init()` resumes simulation without reinitializing the runtime.
+
+```lua
+FastCast2.Init(...) -- Initialize once, or resume if stopped
+FastCast2.Stop()    -- Stop simulation updates
+FastCast2.Init(...) -- Resume the existing runtime
+```
+
+`Stop()` disconnects the simulation update loop. It does not destroy active casts or reset the shared runtime; existing casts resume when simulation starts again. In Parallel, the worker runtime is retained as well.
+
+If you change `Config.SimulationMode` while stopped, the next `Init()` starts the simulation using the updated mode. Configure simulation settings before resuming, and do not call `Init()` to change movement mode; use `FastCast2.SetMovementModeEnabled(true, mode)` for that instead.
+
 ## Quick start
  
 FastCast2 no longer includes a built-in ObjectCache. Manage cosmetic bullet instances yourself and provide them through `behavior.CosmeticBulletTemplate` and `behavior.CosmeticBulletContainer`.
