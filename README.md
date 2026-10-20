@@ -243,7 +243,7 @@ FastCast2:AddVelocityCast(cast, Vector3.new(0, 20, 0))
 FastCast2:AddAccelerationCast(cast, Vector3.new(0, -50, 0))
 
 -- Synchronize trajectory edits with the worker. Pause/resume do this automatically.
-Caster:SyncChangesToCast(cast)
+FastCast2:SyncChangesToCast(cast)
 FastCast2:PauseCast(cast)
 FastCast2:ResumeCast(cast)
 
@@ -251,7 +251,7 @@ FastCast2:ResumeCast(cast)
 FastCast2:TerminateCast(cast)
 ```
 
-> **Tip**: In parallel mode, call `Caster:SyncChangesToCast(cast)` after modifying to push changes into the worker VM.
+> **Tip**: In parallel mode, call `FastCast2:SyncChangesToCast(cast)` after modifying to push changes into the worker VM.
 
 ### -> Get started with the [FastCast2 documentation](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference)
 

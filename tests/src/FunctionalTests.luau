@@ -388,7 +388,7 @@ return function()
 				FastCast:AddAccelerationCast(cast, Vector3.new(0, -5, 0))
 				FastCast:SetPositionCast(cast, Vector3.new(5, 5, 5))
 				FastCast:AddPositionCast(cast, Vector3.new(1, 0, 0))
-				caster:SyncChangesToCast(cast)
+				FastCast:SyncChangesToCast(cast)
 
 				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(10, 0, -100), 1e-3, "velocity was not updated")
 				expect.near(FastCast:GetAccelerationCast(cast), Vector3.new(0, -15, 0), 1e-3, "acceleration was not updated")
@@ -396,7 +396,7 @@ return function()
 
 				FastCast:SetVelocity(cast, Vector3.new(1, 2, 3))
 				FastCast:SetAcceleration(cast, Vector3.new(4, 5, 6))
-				caster:SyncChangesToCast(cast)
+				FastCast:SyncChangesToCast(cast)
 				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(1, 2, 3), 1e-3, "SetVelocity alias did not update velocity")
 				expect.near(FastCast:GetAccelerationCast(cast), Vector3.new(4, 5, 6), 1e-3, "SetAcceleration alias did not update acceleration")
 
@@ -796,7 +796,7 @@ return function()
 				arena:Destroy()
 			end)
 
-			test("SyncChangesToCast updates UserData used by worker OnStep", function(expect)
+			test("FastCast:SyncChangesToCast updates UserData used by worker OnStep", function(expect)
 				local arena = createArena(expect)
 				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
@@ -815,7 +815,7 @@ return function()
 						cast.UserData = {
 							OnStepVelocity = Vector3.new(0, 0, -120),
 						}
-						caster:SyncChangesToCast(cast)
+						FastCast:SyncChangesToCast(cast)
 						FastCast:ResumeCast(cast)
 					end,
 					Hit = function(_, result)
@@ -871,7 +871,7 @@ return function()
 				arena:Destroy()
 			end)
 
-			test("SyncChangesToCast preserves worker-owned runtime and trajectory references", function(expect)
+			test("FastCast:SyncChangesToCast preserves worker-owned runtime and trajectory references", function(expect)
 				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
@@ -893,7 +893,7 @@ return function()
 				local distanceCovered = cast.StateInfo.DistanceCovered
 
 				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -100))
-				caster:SyncChangesToCast(cast)
+				FastCast:SyncChangesToCast(cast)
 				task.wait(0.1)
 
 				expect.equal(cast.StateInfo.Trajectory, trajectory, "trajectory table reference changed")
@@ -906,7 +906,7 @@ return function()
 				arena:Destroy()
 			end)
 
-			test("SyncChangesToCast refreshes the cached MaxDistance", function(expect)
+			test("FastCast:SyncChangesToCast refreshes the cached MaxDistance", function(expect)
 				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
@@ -934,7 +934,7 @@ return function()
 
 				local cast = firedCast :: any
 				cast.RayInfo.MaxDistance = 1
-				caster:SyncChangesToCast(cast)
+				FastCast:SyncChangesToCast(cast)
 				FastCast:ResumeCast(cast)
 
 				expect.truthy(
@@ -948,7 +948,7 @@ return function()
 				arena:Destroy()
 			end)
 
-			test("SyncChangesToCast does not error", function(expect)
+			test("FastCast:SyncChangesToCast does not error", function(expect)
 				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
@@ -970,7 +970,7 @@ return function()
 
 				local cast = firedCast :: any
 				FastCast:SetPositionCast(cast, Vector3.new(10, 10, 10))
-				caster:SyncChangesToCast(cast)
+				FastCast:SyncChangesToCast(cast)
 				task.wait(0.1)
 
 				expect.near(FastCast:GetPositionCast(cast), Vector3.new(10, 10, 10), 1e-3, "sync changed the local cast")
