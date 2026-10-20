@@ -58,7 +58,8 @@ local MutableCastFields = {
 	UserData = true,
 
 	StateInfo = {
-		IsPaused = true,
+		-- Pause/resume is synchronized through the state-only path. Copying this
+		-- field during a full sync can overwrite a newer pause-state message.
 		MaxLifetime = true,
 		HighFidelitySegmentSize = true,
 		HighFidelityBehavior = true,
