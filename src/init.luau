@@ -570,6 +570,10 @@ function FastCast.Init(
 			end
 		end
 
+		if not FireFlushConnection then
+			FireFlushConnection = RunService.PreSimulation:Connect(FlushFires)
+		end
+
 		if not ParallelSimulationRunning then
 			ParallelDispatcher:DispatchAll("StartSimulation")
 			ParallelSimulationRunning = true
