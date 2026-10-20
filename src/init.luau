@@ -766,7 +766,7 @@ end
 	@method SetMovementModeEnabled
 	@param enabled boolean -- Is enabled
 	@param mode "BulkMoveTo" | "Motor6D" -- The movement mode to set for casts.
-	@within FastCastParallel
+	@within FastCast
 ]=]
 function FastCast.SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
 	if not RuntimeInitialized or not ParallelDispatcher then
