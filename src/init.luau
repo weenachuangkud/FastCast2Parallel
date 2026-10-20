@@ -756,6 +756,9 @@ function FastCastParallel:RaycastFire(
 	velocity: Vector3 | number,
 	BehaviorData: TypeDef.FastCastBehavior?
 )
+	if RuntimeDestroying then
+		error("Cannot fire casts while FastCast.DestroyVMs() is in progress")
+	end
 	if not RuntimeInitialized then
 		error("Please call FastCast.Init() before firing casts")
 	end
@@ -795,6 +798,9 @@ function FastCastParallel:BlockcastFire(
 	velocity: Vector3 | number,
 	BehaviorData: TypeDef.FastCastBehavior?
 )
+	if RuntimeDestroying then
+		error("Cannot fire casts while FastCast.DestroyVMs() is in progress")
+	end
 	if not RuntimeInitialized then
 		error("Please call FastCast.Init() before firing casts")
 	end
@@ -835,6 +841,9 @@ function FastCastParallel:SpherecastFire(
 	velocity: Vector3 | number,
 	BehaviorData: TypeDef.FastCastBehavior?
 )
+	if RuntimeDestroying then
+		error("Cannot fire casts while FastCast.DestroyVMs() is in progress")
+	end
 	if not RuntimeInitialized then
 		error("Please call FastCast.Init() before firing casts")
 	end
