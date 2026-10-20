@@ -360,7 +360,7 @@ return function()
 				local caster = createParallelCaster(nil, expect)
 				FastCast.SetMovementModeEnabled(true, "Motor6D")
 
-				FastCast2.SetMovementModeEnabled(true, "BulkMoveTo")
+				FastCast.SetMovementModeEnabled(true, "BulkMoveTo")
 				caster:Destroy()
 			end)
 
