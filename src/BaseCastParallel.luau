@@ -304,6 +304,14 @@ function BaseCast:Spherecast(casterId: number, Origin: Vector3, Radius: number, 
 	end
 end
 
+function BaseCast:StopSimulation()
+	ParallelSimulation.Stop()
+end
+
+function BaseCast:StartSimulation()
+	ParallelSimulation.Start()
+end
+
 function BaseCast:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
 	CurrentMovementMode = mode
 	if mode == "Motor6D" and enabled then

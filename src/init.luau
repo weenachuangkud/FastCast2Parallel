@@ -258,6 +258,7 @@ end
 local CasterRegistry: { [number]: any } = {}
 local NextCasterId = 0
 local RuntimeInitialized = false
+local ParallelSimulationRunning = false
 local RuntimeMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
 local DefaultFastCastEventsModule: ModuleScript? = nil
 local DestroyingCasters: { [number]: { caster: any, remaining: number } } = {}
@@ -568,6 +569,15 @@ function FastCast.Init(
 				end
 			end
 		end
+
+		if not FireFlushConnection then
+			FireFlushConnection = RunService.PreSimulation:Connect(FlushFires)
+		end
+
+		if not ParallelSimulationRunning then
+			ParallelDispatcher:DispatchAll("StartSimulation")
+			ParallelSimulationRunning = true
+		end
 		return
 	end
 
@@ -617,7 +627,29 @@ function FastCast.Init(
 		FireFlushConnection = RunService.PreSimulation:Connect(FlushFires)
 	end
 
+	ParallelSimulationRunning = true
 	RuntimeInitialized = true
+end
+
+--[=[
+	Stop simulation updates while preserving active casts and the worker pool.
+	Call FastCast.Init() again to resume the existing runtime.
+
+	@method Stop
+	@within FastCast
+]=]
+function FastCast.Stop()
+	if not RuntimeInitialized or not ParallelSimulationRunning then
+		return
+	end
+
+	if FireFlushConnection then
+		FireFlushConnection:Disconnect()
+		FireFlushConnection = nil
+	end
+
+	ParallelDispatcher:DispatchAll("StopSimulation")
+	ParallelSimulationRunning = false
 end
 
 --[=[

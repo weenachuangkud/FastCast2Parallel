@@ -19,6 +19,7 @@ The functional suite is organized into two sections. Both exercise the **Paralle
 ### API coverage
 
 - [ ] Initialize, create, and destroy casters.
+- [ ] Stop simulation updates with an active cast, then call `FastCast.Init()` and confirm the cast resumes.
 - [ ] Fire Raycast, Blockcast, and Spherecast casts; confirm each reaches a target and terminates.
 - [ ] Verify enabled public event callbacks and multiple Signal listeners.
 - [ ] Verify event configuration can disable callback channels; for example, setting `UseLengthChanged = true` enables the `LengthChanged` callback.

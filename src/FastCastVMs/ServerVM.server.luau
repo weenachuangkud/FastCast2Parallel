@@ -89,6 +89,14 @@ actor:BindToMessage("SetMovementModeEnabled", function(enabled: boolean, mode: "
 	BaseCast:SetMovementModeEnabled(enabled, mode)
 end)
 
+actor:BindToMessage("StopSimulation", function()
+	BaseCast:StopSimulation()
+end)
+
+actor:BindToMessage("StartSimulation", function()
+	BaseCast:StartSimulation()
+end)
+
 actor:BindToMessage("DestroyCaster", function(casterId: number)
 	BaseCast:DestroyCaster(casterId)
 end)
