@@ -25,7 +25,7 @@ export type Dispatcher = {
 	Allocate: (Dispatcher, Threads: number, Data: any?, Callback: (...any) -> ()?) -> (),
 	DispatchAll: (Dispatcher, Message : string?, ...any) -> (),
 
-	Destroy : (Dispatcher) -> ()
+	Destroy : (Dispatcher, destroySource: boolean?) -> ()
 }
 
 -- Paths
@@ -232,21 +232,31 @@ function Dispatcher:Dispatch(Message : string?, ...)
 	self.Threads[self._nextIndex]:SendMessage(Message or "Dispatch", ...)
 end
 
-function Dispatcher:Destroy(destroySource: boolean)
+function Dispatcher:Destroy(destroySource: boolean?)
+	local container = Container
+	if not container then
+		return
+	end
+
 	for _, Thread in self.Threads do
 		Thread:SendMessage("Destroy")
 	end
 	self.Threads = {}
 
-	task.spawn(function()
-		while #Container:GetChildren() ~= 0 do 
-			task.wait() 
-		end
-		Container:Destroy()
-		if destroySource then
-			script:Destroy()
-		end
-	end)
+	-- Teardown must finish before Init can create a replacement pool. If this
+	-- runs asynchronously, the next Init can collide with the old container.
+	while #container:GetChildren() ~= 0 do
+		RunService.PostSimulation:Wait()
+	end
+
+	container:Destroy()
+	if Container == container then
+		Container = nil
+	end
+
+	if destroySource then
+		script:Destroy()
+	end
 end
 
 function Dispatcher:DispatchAll(Message : string?, ...)

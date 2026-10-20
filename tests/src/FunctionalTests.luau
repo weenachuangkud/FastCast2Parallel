@@ -1011,6 +1011,34 @@ return function()
 				caster:Destroy()
 				arena:Destroy()
 			end)
+
+			test("DestroyVMs tears down workers and Init recreates the runtime", function(expect)
+				local caster = createParallelCaster({
+					CastFire = function()
+					end,
+				}, expect)
+				local behavior = FastCast.newBehavior()
+
+				FastCast.DestroyVMs()
+				expect.equal(caster.CasterId ~= nil, true, "DestroyVMs destroyed the caster object")
+
+				local ok = pcall(function()
+					caster:RaycastFire(Vector3.zero, Vector3.yAxis, 60, behavior)
+				end)
+				expect.equal(ok, false, "casts should require Init after DestroyVMs")
+
+				FastCast.Init(2, "BulkMoveTo")
+				local receivedCast = nil
+				caster.CastFire:Connect(function(cast)
+					receivedCast = cast
+				end)
+				caster:RaycastFire(Vector3.zero, Vector3.yAxis, 60, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return receivedCast ~= nil
+				end, HIT_TIMEOUT), "existing caster could not fire after runtime reinitialization")
+
+				caster:Destroy()
+			end)
 		end),
 	}
 end

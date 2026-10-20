@@ -90,6 +90,8 @@ FastCast2.Init(...) -- Resume the existing runtime
 
 `Stop()` disconnects the simulation update loop. It does not destroy active casts or reset the shared runtime; existing casts resume when simulation starts again. In Parallel, the worker runtime is retained as well.
 
+Use `FastCast2.DestroyVMs()` when you want to tear down the Parallel worker pool completely. This discards active worker casts and resets the runtime's initialized/running state; call `FastCast2.Init(...)` again before firing casts. Existing caster objects and their event signals are retained, but active casts do not survive VM destruction.
+
 If you change `Config.SimulationMode` while stopped, the next `Init()` starts the simulation using the updated mode. Configure simulation settings before resuming, and do not call `Init()` to change movement mode; use `FastCast2.SetMovementModeEnabled(true, mode)` for that instead.
 
 ## Quick start
