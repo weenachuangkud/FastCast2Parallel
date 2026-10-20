@@ -197,7 +197,7 @@ return function()
 		Framework.describe("FastCast — Shared API coverage", function(test)
 			test("initializes shared runtime and creates casters", function(expect)
 				FastCast.Init(2, "BulkMoveTo")
-				local caster = createParallelCaster(expect)
+				local caster = createParallelCaster(nil, expect)
 				expect.equal(type(caster.CasterId), "number", "caster did not receive a numeric ID")
 
 				caster:Destroy()
@@ -310,7 +310,7 @@ return function()
 				behavior.CosmeticBulletContainer = container
 				behavior.CloneTemplate = false
 
-				local caster = createParallelCaster(expect)
+				local caster = createParallelCaster(nil, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
 				expect.truthy(Framework.waitFor(function()
 					return template.Parent == container
@@ -357,7 +357,7 @@ return function()
 			end)
 
 			test("movement mode can be switched", function(expect)
-				local caster = createParallelCaster(expect)
+				local caster = createParallelCaster(nil, expect)
 				caster:SetMovementModeEnabled(true, "Motor6D")
 				expect.equal(caster.MovementMode, "Motor6D", "movement mode was not switched to Motor6D")
 
@@ -540,7 +540,7 @@ return function()
 				local firstCount = 0
 				local secondCount = 0
 
-				local caster = createParallelCaster(expect)
+				local caster = createParallelCaster(nil, expect)
 				caster.Hit:Connect(function(_, result)
 					if result.Instance == wall then
 						firstCount += 1
@@ -853,7 +853,7 @@ return function()
 					received[name] = true
 				end)
 
-				local caster = createParallelCaster(expect)
+				local caster = createParallelCaster(nil, expect)
 				caster:SetFastCastEventsModule(TestEventsModule)
 
 				-- Let the worker VMs receive the new events module.
