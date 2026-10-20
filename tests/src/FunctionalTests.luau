@@ -20,11 +20,18 @@ local HIT_TIMEOUT = 5
 
 local arenaCounter = 0
 
-local function createArena(): Folder
+local function createArena(expect: any?): Folder
 	arenaCounter += 1
 	local arena = Instance.new("Folder")
 	arena.Name = "FastCast2TestArena" .. arenaCounter
 	arena.Parent = workspace
+	if expect then
+		expect.cleanup(function()
+			if arena.Parent then
+				arena:Destroy()
+			end
+		end)
+	end
 	return arena
 end
 
@@ -72,11 +79,19 @@ local function fire(caster: any, castType: string, origin: Vector3, direction: V
 	end
 end
 
-local function createParallelCaster(events: { [string]: any }?): any
+local function createParallelCaster(events: { [string]: any }?, expect: any?): any
 	local caster = FastCast.new()
 
 	for name, fn in events or {} do
 		caster[name] = fn
+	end
+
+	if expect then
+		expect.cleanup(function()
+			if caster.CasterId ~= nil and not caster._destroying then
+				caster:Destroy()
+			end
+		end)
 	end
 
 	return caster
@@ -85,8 +100,8 @@ end
 local function registerParallelCastTypes(test: (string, any) -> ())
 	for _, castType in CAST_TYPES do
 		test(castType .. " reaches a wall", function(expect)
-			local arena = createArena()
-			local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+			local arena = createArena(expect)
+			local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 			local container = createContainer(arena)
 			local behavior = makeBehavior(container)
 
@@ -100,7 +115,7 @@ local function registerParallelCastTypes(test: (string, any) -> ())
 				CastTerminating = function()
 					terminated = true
 				end,
-			})
+			}, expect)
 
 			fire(caster, castType, Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
 
@@ -182,7 +197,7 @@ return function()
 		Framework.describe("FastCast — Shared API coverage", function(test)
 			test("initializes shared runtime and creates casters", function(expect)
 				FastCast.Init(2, "BulkMoveTo")
-				local caster = createParallelCaster()
+				local caster = createParallelCaster(nil, expect)
 				expect.equal(type(caster.CasterId), "number", "caster did not receive a numeric ID")
 
 				caster:Destroy()
@@ -190,9 +205,9 @@ return function()
 
 			registerParallelCastTypes(test)
 			test("RaycastParams filters the first wall and hits the next", function(expect)
-				local arena = createArena()
-				local ignoredWall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
-				local targetWall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				local ignoredWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 2))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local params = RaycastParams.new()
@@ -205,7 +220,7 @@ return function()
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
-				})
+				}, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(Framework.waitFor(function()
@@ -218,7 +233,7 @@ return function()
 			end)
 
 			test("MaxDistance terminates without reporting a hit", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.MaxDistance = 15
@@ -232,7 +247,7 @@ return function()
 					CastTerminating = function()
 						terminationCount += 1
 					end,
-				})
+				}, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
 
 				expect.truthy(Framework.waitFor(function()
@@ -247,7 +262,7 @@ return function()
 			end)
 
 			test("cosmetic template is cloned into its container and ignored by its own cast", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local template = Instance.new("Part")
 				template.Name = "CosmeticTemplate"
@@ -256,7 +271,7 @@ return function()
 				template.CanQuery = true
 				template.Parent = arena
 
-				local targetWall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local behavior = makeBehavior(container)
 				behavior.CosmeticBulletTemplate = template
 				behavior.CosmeticBulletContainer = container
@@ -267,7 +282,7 @@ return function()
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
-				})
+				}, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(Framework.waitFor(function()
@@ -282,7 +297,7 @@ return function()
 			end)
 
 			test("CloneTemplate false uses the supplied cosmetic instance", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local template = Instance.new("Part")
 				template.Name = "CosmeticInstance"
@@ -295,7 +310,7 @@ return function()
 				behavior.CosmeticBulletContainer = container
 				behavior.CloneTemplate = false
 
-				local caster = createParallelCaster()
+				local caster = createParallelCaster(nil, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
 				expect.truthy(Framework.waitFor(function()
 					return template.Parent == container
@@ -308,8 +323,8 @@ return function()
 			end)
 
 			test("event configuration can disable callback channels", function(expect)
-				local arena = createArena()
-				createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.FastCastEventsConfig.UseHit = false
@@ -329,9 +344,9 @@ return function()
 					CastTerminating = function()
 						terminationCount += 1
 					end,
-				})
+				}, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
-				task.wait(0.5)
+				task.wait(0.2)
 
 				expect.equal(hitCount, 0, "disabled Hit callback still fired")
 				expect.equal(castFireCount, 0, "disabled CastFire callback still fired")
@@ -342,7 +357,7 @@ return function()
 			end)
 
 			test("movement mode can be switched", function(expect)
-				local caster = createParallelCaster()
+				local caster = createParallelCaster(nil, expect)
 				caster:SetMovementModeEnabled(true, "Motor6D")
 				expect.equal(caster.MovementMode, "Motor6D", "movement mode was not switched to Motor6D")
 
@@ -352,7 +367,7 @@ return function()
 			end)
 
 			test("cast velocity, acceleration and position can be manipulated", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local firedCast = nil
@@ -361,7 +376,7 @@ return function()
 					CastFire = function(cast)
 						firedCast = cast
 					end,
-				})
+				}, expect)
 
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 1, 0), 60, behavior)
 				expect.truthy(Framework.waitFor(function()
@@ -393,8 +408,8 @@ return function()
 			end)
 
 			test("HighFidelity Always still resolves a hit", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
@@ -405,7 +420,7 @@ return function()
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
-				})
+				}, expect)
 
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
 				expect.truthy(Framework.waitFor(function()
@@ -418,7 +433,7 @@ return function()
 			end)
 
 			test("HighFidelity Always terminates when MaxDistance is reached", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.MaxDistance = 15
@@ -435,7 +450,7 @@ return function()
 					CastTerminating = function()
 						terminationCount += 1
 					end,
-				})
+				}, expect)
 
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
 
@@ -455,7 +470,7 @@ return function()
 			end)
 
 			test("MaxLifetime expires casts at a simulation update boundary", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.MaxLifetime = 0.1
@@ -465,7 +480,7 @@ return function()
 					CastTerminating = function(cast)
 						terminatedRuntime = cast.StateInfo.TotalRuntime
 					end,
-				})
+				}, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 10, behavior)
 
 				expect.truthy(
@@ -484,7 +499,7 @@ return function()
 			end)
 
 			test("MaxLifetime zero terminates before the first movement update", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.MaxLifetime = 0
@@ -499,7 +514,7 @@ return function()
 					LengthChanged = function()
 						lengthChangedCount += 1
 					end,
-				})
+				}, expect)
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
 
 				expect.truthy(
@@ -517,15 +532,15 @@ return function()
 			end)
 
 			test("events are Signals that support multiple listeners", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 
 				local firstCount = 0
 				local secondCount = 0
 
-				local caster = createParallelCaster()
+				local caster = createParallelCaster(nil, expect)
 				caster.Hit:Connect(function(_, result)
 					if result.Instance == wall then
 						firstCount += 1
@@ -559,7 +574,7 @@ return function()
 			registerParallelCastTypes(test)
 
 			test("CastFire exposes documented data for all cast variants", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.MaxLifetime = 3
@@ -571,7 +586,7 @@ return function()
 					CastFire = function(cast)
 						received[cast.Type] = cast
 					end,
-				})
+				}, expect)
 				for _, castType in CAST_TYPES do
 					fire(caster, castType, Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
 				end
@@ -617,8 +632,8 @@ return function()
 			end)
 
 			test("one caster can fire again after its first shot terminates", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 
@@ -633,7 +648,7 @@ return function()
 							hitCount += 1
 						end
 					end,
-				})
+				}, expect)
 
 				-- Let the first shot finish before queueing more shots on the same caster.
 				caster:RaycastFire(Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
@@ -669,12 +684,12 @@ return function()
 					CastFire = function(cast)
 						casterAId = cast.CasterId
 					end,
-				})
+				}, expect)
 				local casterB = createParallelCaster({
 					CastFire = function(cast)
 						casterBId = cast.CasterId
 					end,
-				})
+				}, expect)
 
 				local behavior = FastCast.newBehavior()
 				casterA:RaycastFire(Vector3.zero, Vector3.yAxis, 50, behavior)
@@ -704,8 +719,8 @@ return function()
 
 
 			test("PauseCast and ResumeCast freeze and resume worker simulation", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local firedCast = nil
@@ -723,7 +738,7 @@ return function()
 					CastTerminating = function()
 						terminationCount += 1
 					end,
-				})
+				}, expect)
 
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
 				expect.truthy(
@@ -751,8 +766,8 @@ return function()
 			end)
 
 			test("worker OnStep runs before movement and can steer a cast", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.FastCastEventsModuleConfig.UseOnStep = true
@@ -765,7 +780,7 @@ return function()
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
-				})
+				}, expect)
 				caster:SetFastCastEventsModule(TestEventsModule)
 				task.wait(0.25)
 
@@ -784,8 +799,8 @@ return function()
 			end)
 
 			test("SyncChangesToCast updates UserData used by worker OnStep", function(expect)
-				local arena = createArena()
-				local wall = createWall(arena, Vector3.new(0, 0, -20), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.FastCastEventsModuleConfig.UseOnStep = true
@@ -808,7 +823,7 @@ return function()
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
-				})
+				}, expect)
 
 				caster:SetFastCastEventsModule(TestEventsModule)
 				task.wait(0.25)
@@ -826,8 +841,8 @@ return function()
 				arena:Destroy()
 			end)
 			test("SetFastCastEventsModule forwards module events", function(expect)
-				local arena = createArena()
-				createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local arena = createArena(expect)
+				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 
@@ -838,7 +853,7 @@ return function()
 					received[name] = true
 				end)
 
-				local caster = createParallelCaster()
+				local caster = createParallelCaster(nil, expect)
 				caster:SetFastCastEventsModule(TestEventsModule)
 
 				-- Let the worker VMs receive the new events module.
@@ -859,7 +874,7 @@ return function()
 			end)
 
 			test("SyncChangesToCast preserves worker-owned runtime and trajectory references", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local firedCast = nil
@@ -867,7 +882,7 @@ return function()
 					CastFire = function(cast)
 						firedCast = cast
 					end,
-				})
+				}, expect)
 
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 60, behavior)
 				expect.truthy(Framework.waitFor(function()
@@ -894,7 +909,7 @@ return function()
 			end)
 
 			test("SyncChangesToCast refreshes the cached MaxDistance", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.FastCastEventsConfig.UseCastTerminating = true
@@ -909,7 +924,7 @@ return function()
 					CastTerminating = function()
 						terminationCount += 1
 					end,
-				})
+				}, expect)
 
 				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
 				expect.truthy(
@@ -936,7 +951,7 @@ return function()
 			end)
 
 			test("SyncChangesToCast does not error", function(expect)
-				local arena = createArena()
+				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 
@@ -945,7 +960,7 @@ return function()
 					CastFire = function(cast)
 						firedCast = cast
 					end,
-				})
+				}, expect)
 
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 1, 0), 60, behavior)
 				expect.truthy(
