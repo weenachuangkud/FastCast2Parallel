@@ -259,6 +259,7 @@ local CasterRegistry: { [number]: any } = {}
 local NextCasterId = 0
 local RuntimeInitialized = false
 local ParallelSimulationRunning = false
+local RuntimeDestroying = false
 local RuntimeMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
 local DefaultFastCastEventsModule: ModuleScript? = nil
 local DestroyingCasters: { [number]: { caster: any, remaining: number } } = {}
@@ -550,6 +551,10 @@ function FastCast.Init(
 	movementMode: "BulkMoveTo" | "Motor6D"?,
 	FastCastEventsModule: ModuleScript?
 )
+	if RuntimeDestroying then
+		error("Cannot call FastCast.Init() while FastCast.DestroyVMs() is in progress")
+	end
+
 	if RuntimeInitialized then
 		local initializedWorkerCount = ParallelDispatcher and #ParallelDispatcher.Threads or 0
 		if numWorkers ~= initializedWorkerCount then
@@ -639,7 +644,7 @@ end
 	@within FastCast
 ]=]
 function FastCast.Stop()
-	if not RuntimeInitialized or not ParallelSimulationRunning then
+	if RuntimeDestroying or not RuntimeInitialized or not ParallelSimulationRunning then
 		return
 	end
 
@@ -650,6 +655,66 @@ function FastCast.Stop()
 
 	ParallelDispatcher:DispatchAll("StopSimulation")
 	ParallelSimulationRunning = false
+end
+
+--[=[
+	Destroy the shared worker VMs and tear down the initialized runtime.
+	Active casts are discarded with the workers. Existing caster objects and
+	their event signals remain available, but Init() must be called again before
+	firing more casts.
+	@method DestroyVMs
+	@within FastCast
+]=]
+function FastCast.DestroyVMs()
+	if not RuntimeInitialized or RuntimeDestroying then
+		return
+	end
+
+	RuntimeDestroying = true
+
+	local dispatcher = ParallelDispatcher
+	if FireFlushConnection then
+		FireFlushConnection:Disconnect()
+		FireFlushConnection = nil
+	end
+
+	-- Prevent new requests from being queued while the worker pool is removed.
+	table.clear(FireQueue)
+	table.clear(FireBatches)
+	table.clear(FireUsed)
+
+	if dispatcher then
+		-- Stop first so a worker cannot advance casts while its teardown message
+		-- is being processed. Destroy() waits until all worker Actors are gone.
+		dispatcher:DispatchAll("StopSimulation")
+	end
+
+	ParallelSimulationRunning = false
+	RuntimeInitialized = false
+	ParallelDispatcher = nil
+
+	local ok, err = pcall(function()
+		if dispatcher then
+			dispatcher:Destroy(true)
+		end
+	end)
+
+	-- Worker destruction also invalidates any pending per-caster destruction
+	-- acknowledgements; finalize those casters now that no worker can reply.
+	local pendingCasterIds = {}
+	for casterId in DestroyingCasters do
+		table.insert(pendingCasterIds, casterId)
+	end
+	for _, casterId in pendingCasterIds do
+		FinalizeDestroyedCaster(casterId)
+	end
+
+	RuntimeMovementMode = "BulkMoveTo"
+	RuntimeDestroying = false
+
+	if not ok then
+		error("FastCast.DestroyVMs() failed to tear down the worker pool: " .. tostring(err), 2)
+	end
 end
 
 --[=[
