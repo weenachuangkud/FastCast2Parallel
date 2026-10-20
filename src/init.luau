@@ -445,7 +445,6 @@ function FastCast.new()
 		_events = NewCasterSignals(),
 		WorldRoot = workspace,
 		FastCastEventsModule = DefaultFastCastEventsModule,
-		MovementMode = RuntimeMovementMode,
 	}
 
 	setmetatable(caster, FastCastParallel)
@@ -609,7 +608,6 @@ function FastCast.Init(
 	RuntimeMovementMode = movementMode or "BulkMoveTo"
 	DefaultFastCastEventsModule = FastCastEventsModule
 	for _, caster in CasterRegistry do
-		caster.MovementMode = RuntimeMovementMode
 		if FastCastEventsModule and not caster.FastCastEventsModule then
 			caster.FastCastEventsModule = FastCastEventsModule
 		end
@@ -777,13 +775,6 @@ function FastCast.SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | 
 
 	ParallelDispatcher:DispatchAll("SetMovementModeEnabled", enabled, mode)
 	RuntimeMovementMode = mode
-	for _, caster in CasterRegistry do
-		caster.MovementMode = mode
-	end
-end
-
-function FastCastParallel:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | "Motor6D")
-	FastCast.SetMovementModeEnabled(enabled, mode)
 end
 
 function FastCastParallel:Destroy()
