@@ -358,7 +358,7 @@ return function()
 
 			test("movement mode can be switched", function(expect)
 				local caster = createParallelCaster(nil, expect)
-				FastCast2.SetMovementModeEnabled(true, "Motor6D")
+				FastCast.SetMovementModeEnabled(true, "Motor6D")
 
 				FastCast2.SetMovementModeEnabled(true, "BulkMoveTo")
 				caster:Destroy()
