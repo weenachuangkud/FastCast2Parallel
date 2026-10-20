@@ -35,8 +35,8 @@ The functional suite is organized into two sections. Both exercise the **Paralle
 - [ ] Confirm events are routed to the correct caster when multiple casters share the runtime.
 - [ ] Confirm a caster can fire again after an earlier cast terminates, including multiple requests close together.
 - [ ] Confirm worker `OnStep` runs before movement and can steer a cast.
-- [ ] Confirm `SyncChangesToCast` propagates updated `UserData` to worker `OnStep`.
-- [ ] Confirm `SyncChangesToCast` preserves worker-owned runtime and trajectory references, refreshes cached `MaxDistance`, and applies cast changes.
+- [ ] Confirm `FastCast:SyncChangesToCast(cast)` propagates updated `UserData` to worker `OnStep`.
+- [ ] Confirm `FastCast:SyncChangesToCast(cast)` preserves worker-owned runtime and trajectory references, refreshes cached `MaxDistance`, and applies cast changes.
 - [ ] Confirm `SetFastCastEventsModule` forwards module events to the configured module.
 - [ ] Check Parallel-specific pause/resume and worker simulation behavior.
 
@@ -52,5 +52,5 @@ Compare benchmark runs using the same environment and settings. Performance resu
 
 - Run the suite in Roblox Studio; static checks alone do not verify worker/runtime behavior.
 - Cosmetic projectile lifetime and cleanup are caller-owned. FastCast2Parallel does not automatically destroy projectiles or return them to a cache.
-- When changing worker communication or synchronization, pay special attention to event routing, `SyncChangesToCast`, and pause/resume behavior.
+- When changing worker communication or synchronization, pay special attention to event routing, `FastCast:SyncChangesToCast(cast)`, and pause/resume behavior.
 - API reference: [FastCast2Parallel API](https://weenachuangkud.github.io/FastCast2Parallel/docs/api-reference/).
