@@ -172,7 +172,8 @@ export type VisualizeCastSettings = {
 --[=[
 	@type CasterParallel
 
-	Represents the parallel caster exposed by FastCast.new().
+	Represents the parallel caster exposed by FastCast.new(). Cast manipulation
+	and synchronization utilities belong to the shared FastCast module.
 ]=]
 export type CasterParallel = {
 	WorldRoot: WorldRoot,
@@ -210,15 +211,6 @@ export type CasterParallel = {
 
 	SetFastCastEventsModule: (self: CasterParallel, moduleScript: ModuleScript?) -> (),
 
-	AddVelocityCast: (self: CasterParallel, cast: vaildcast, velocity: Vector3) -> (),
-	SetVelocityCast: (self: CasterParallel, cast: vaildcast, velocity: Vector3) -> (),
-	GetVelocityCast: (self: CasterParallel, cast: vaildcast) -> Vector3,
-	AddAccelerationCast: (self: CasterParallel, cast: vaildcast, acceleration: Vector3) -> (),
-	SetAccelerationCast: (self: CasterParallel, cast: vaildcast, acceleration: Vector3) -> (),
-	GetAccelerationCast: (self: CasterParallel, cast: vaildcast) -> Vector3,
-	AddPositionCast: (self: CasterParallel, cast: vaildcast, position: Vector3) -> (),
-	GetPositionCast: (self: CasterParallel, cast: vaildcast) -> Vector3,
-	SyncChangesToCast: (self: CasterParallel, cast: vaildcast) -> (),
 	Destroy: (self: CasterParallel) -> ()
 }
 
