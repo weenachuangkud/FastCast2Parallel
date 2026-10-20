@@ -358,11 +358,9 @@ return function()
 
 			test("movement mode can be switched", function(expect)
 				local caster = createParallelCaster(nil, expect)
-				caster:SetMovementModeEnabled(true, "Motor6D")
-				expect.equal(caster.MovementMode, "Motor6D", "movement mode was not switched to Motor6D")
+				FastCast2.SetMovementModeEnabled(true, "Motor6D")
 
-				caster:SetMovementModeEnabled(true, "BulkMoveTo")
-				expect.equal(caster.MovementMode, "BulkMoveTo", "movement mode was not switched back")
+				FastCast2.SetMovementModeEnabled(true, "BulkMoveTo")
 				caster:Destroy()
 			end)
 

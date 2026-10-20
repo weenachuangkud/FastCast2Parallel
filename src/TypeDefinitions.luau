@@ -182,7 +182,6 @@ export type CasterParallel = {
 	CastTerminating: Signal.Signal<OnCastTerminatingFunction> | OnCastTerminatingFunction,
 	CastFire: Signal.Signal<OnCastFireFunction> | OnCastFireFunction,
 	CasterId: number,
-	MovementMode: ("BulkMoveTo" | "Motor6D")?,
 	FastCastEventsModule: FastCastEventsModule?,
 
 	RaycastFire: (
@@ -209,11 +208,6 @@ export type CasterParallel = {
 		Behavior: FastCastBehavior?
 	) -> (),
 
-	SetMovementModeEnabled: (
-		self: CasterParallel,
-		enabled: boolean,
-		mode: "BulkMoveTo" | "Motor6D"
-	) -> (),
 	SetFastCastEventsModule: (self: CasterParallel, moduleScript: ModuleScript?) -> (),
 
 	AddVelocityCast: (self: CasterParallel, cast: vaildcast, velocity: Vector3) -> (),
