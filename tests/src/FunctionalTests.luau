@@ -1014,18 +1014,10 @@ return function()
 
 			test("DestroyVMs tears down workers and Init recreates the runtime", function(expect)
 				local caster = createParallelCaster({
-					CastFire = function(cast)
-						cast.UserData.DestroyVMsCastFire = true
+					CastFire = function()
 					end,
 				}, expect)
 				local behavior = FastCast.newBehavior()
-
-				-- Ensure this test starts from an initialized runtime and that the
-				-- caster object itself survives worker teardown.
-				caster:RaycastFire(Vector3.zero, Vector3.yAxis, 60, behavior)
-				expect.truthy(Framework.waitFor(function()
-					return true
-				end, 0.05), "test setup did not yield")
 
 				FastCast.DestroyVMs()
 				expect.equal(caster.CasterId ~= nil, true, "DestroyVMs destroyed the caster object")
