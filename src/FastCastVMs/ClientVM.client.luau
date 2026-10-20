@@ -89,6 +89,14 @@ actor:BindToMessage("SetMovementModeEnabled", function(enabled: boolean, mode: "
 	BaseCast:SetMovementModeEnabled(enabled, mode)
 end)
 
+actor:BindToMessage("StopSimulation", function()
+	require(script.Parent.Parent:WaitForChild("ParallelSimulation")).Stop()
+end)
+
+actor:BindToMessage("StartSimulation", function()
+	require(script.Parent.Parent:WaitForChild("ParallelSimulation")).Start()
+end)
+
 actor:BindToMessage("DestroyCaster", function(casterId: number)
 	BaseCast:DestroyCaster(casterId)
 end)
