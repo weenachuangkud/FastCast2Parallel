@@ -162,12 +162,12 @@ end
 
 	@param predicate () -> boolean
 	@param timeout number? -- Seconds to wait. Defaults to 5.
-	@param interval number? -- Seconds between polls. Defaults to 0.05.
+	@param interval number? -- Seconds between polls. Defaults to 0.01.
 	@return boolean
 ]=]
 function Framework.waitFor(predicate: () -> boolean, timeout: number?, interval: number?): boolean
 	timeout = timeout or 5
-	interval = interval or 0.05
+	interval = interval or 0.01
 	local deadline = os.clock() + timeout
 
 	while true do
