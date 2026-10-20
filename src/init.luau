@@ -955,7 +955,7 @@ end
 
 --[=[
 	Sets a cast's velocity while preserving its current position and runtime.
-	In parallel mode, call Caster:SyncChangesToCast(cast) after changing trajectory.
+	In parallel mode, call FastCast:SyncChangesToCast(cast) after changing trajectory.
 	@method SetVelocity
 	@within FastCast
 ]=]
@@ -965,7 +965,7 @@ end
 
 --[=[
 	Sets a cast's acceleration while preserving its current position and runtime.
-	In parallel mode, call Caster:SyncChangesToCast(cast) after changing trajectory.
+	In parallel mode, call FastCast:SyncChangesToCast(cast) after changing trajectory.
 	@method SetAcceleration
 	@within FastCast
 ]=]
@@ -1016,10 +1016,10 @@ Synchronize new changes to the ActiveCast.
 
 	@method SyncChangesToCast
 	@param cast vaildcast -- The active cast to synchronize.
-	@within FastCastParallel
+	@within FastCast
 
 ]=]
-function FastCastParallel:SyncChangesToCast(cast: vaildcast)
+function FastCast:SyncChangesToCast(cast: vaildcast)
 	local syncChange: BindableEvent = (cast.Caster :: any).SyncChange
 	local cancelHighResCast = cast.StateInfo.CancelHighResCast
 
