@@ -1396,7 +1396,10 @@ local function SimulateAlwaysHighFidelity(
 
 	local canPierce, castTerminatingfn = GetEventCallbacks(id)
 	local eventConfig = casts_FastCastEventsModuleConfig[id]
-	local canPierceEnabled = eventConfig ~= nil and eventConfig.UseCanPierce
+	local canPierceEnabled =
+		canPierce ~= nil
+		and eventConfig ~= nil
+		and eventConfig.UseCanPierce == true
 	local endpoint =
 		resultOfCast
 		and resultOfCast.Position
