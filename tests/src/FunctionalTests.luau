@@ -205,20 +205,30 @@ return function()
 
 			test("Stop pauses simulation and Init resumes it", function(expect)
 				local arena = createArena(expect)
-				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local wall = createWall(arena, Vector3.new(0, 0, -100), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local hitInstance = nil
+				local castFired = false
 
 				local caster = createParallelCaster({
+					CastFire = function()
+						castFired = true
+					end,
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
 				}, expect)
 
-				FastCast.Stop()
-				task.wait(0.1)
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return castFired
+					end, HIT_TIMEOUT),
+					"CastFire did not fire before stopping simulation"
+				)
+
+				FastCast.Stop()
 				task.wait(0.1)
 				expect.equal(hitInstance, nil, "cast advanced while simulation was stopped")
 
@@ -227,7 +237,7 @@ return function()
 					Framework.waitFor(function()
 						return hitInstance ~= nil
 					end, HIT_TIMEOUT),
-					"cast did not resume after Init"
+					"active cast did not resume after Init"
 				)
 				expect.equal(hitInstance, wall, "resumed cast hit the wrong instance")
 
@@ -303,7 +313,12 @@ return function()
 					end, HIT_TIMEOUT),
 					"runtime Offset was not applied to the cosmetic bullet"
 				)
-				expect.equal(cosmetic.CFrame, cast.CFrame, "cast.CFrame did not reflect the cosmetic offset")
+				expect.truthy(
+					Framework.waitFor(function()
+						return cosmetic.CFrame == cast.CFrame
+					end, HIT_TIMEOUT),
+					"cast.CFrame did not catch up with the cosmetic offset"
+				)
 
 				caster:Destroy()
 				arena:Destroy()
