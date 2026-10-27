@@ -21,10 +21,14 @@ return {
 	Pierced = forward("Pierced"),
 	LengthChanged = forward("LengthChanged"),
 	CastTerminating = forward("CastTerminating"),
-	CanPierce = function(cast)
+	CanPierce = function(cast, result)
 		-- Tests opt into piercing explicitly so the default worker behavior
-		-- remains non-piercing.
-		return cast.UserData ~= nil and cast.UserData.PierceAll == true
+		-- remains non-piercing. A test may designate a terminal wall to prove
+		-- that the pierce limit stops before that wall.
+		local userData = cast.UserData
+		return userData ~= nil
+			and userData.PierceAll == true
+			and result.Instance ~= userData.TerminalWall
 	end,
 	OnStep = function(cast, _deltaTime)
 		-- Test-only hook used to prove OnStep runs before the worker's movement.
