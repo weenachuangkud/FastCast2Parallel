@@ -1059,6 +1059,7 @@ local function SimulateCast(
 		print("Casting for frame - SimulateCast")
 	end
 
+	local cast = ActivesRef[id]
 	local trajectory = casts_Trajectory[id]
 	local rayInfo = casts_RayInfo[id]
 	local variant = casts_CastVariant[id]
@@ -1136,6 +1137,7 @@ local function SimulateCast(
 
 		table.insert(pierceResults, result)
 		rayOrigin = result.Position + unitDirection * RAY_SEARCH_OFFSET
+		result = nil
 	end
 
 	local rayDisplacement = if result
