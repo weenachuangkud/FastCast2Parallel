@@ -1172,6 +1172,7 @@ local function SimulateCast(
 		return false
 	end
 
+	local unitDirection = displacement / displacementMagnitude
 	local worldRoot = rayInfo.WorldRoot
 	local handler = castHandlers[variant.CastType]
 
