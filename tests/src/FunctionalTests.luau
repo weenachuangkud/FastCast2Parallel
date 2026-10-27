@@ -274,39 +274,39 @@ return function()
 				behavior.CosmeticBulletTemplate.Anchored = true
 				behavior.CosmeticBulletTemplate.Parent = arena
 
-			local firedCast = nil
-			local caster = createParallelCaster({
-				CastFire = function(cast)
-					firedCast = cast
-				end,
-			}, expect)
+				local firedCast = nil
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						firedCast = cast
+					end,
+				}, expect)
 
-			fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 30, behavior)
-			expect.truthy(
-				Framework.waitFor(function()
-					return firedCast ~= nil and firedCast.RayInfo.CosmeticBulletObject ~= nil
-				end, HIT_TIMEOUT),
-				"CastFire did not expose the cosmetic cast"
-			)
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 30, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return firedCast ~= nil and firedCast.RayInfo.CosmeticBulletObject ~= nil
+					end, HIT_TIMEOUT),
+					"CastFire did not expose the cosmetic cast"
+				)
 
-			local cast = firedCast :: any
-			local cosmetic = cast.RayInfo.CosmeticBulletObject
-			expect.equal(cast.Offset, initialOffset, "InitialOffset was not copied to cast.Offset")
-			expect.equal(cosmetic.CFrame, cast.CFrame, "initial cosmetic transform did not include Offset")
+				local cast = firedCast :: any
+				local cosmetic = cast.RayInfo.CosmeticBulletObject
+				expect.equal(cast.Offset, initialOffset, "InitialOffset was not copied to cast.Offset")
+				expect.equal(cosmetic.CFrame, cast.CFrame, "initial cosmetic transform did not include Offset")
 
-			local previousPosition = cosmetic.Position
-			cast.Offset = CFrame.new(100, 0, 0)
-			FastCast:SyncChangesToCast(cast)
-			expect.truthy(
-				Framework.waitFor(function()
-					return (cosmetic.Position - previousPosition).Magnitude > 50
-				end, HIT_TIMEOUT),
-				"runtime Offset was not applied to the cosmetic bullet"
-			)
-			expect.equal(cosmetic.CFrame, cast.CFrame, "cast.CFrame did not reflect the cosmetic offset")
+				local previousPosition = cosmetic.Position
+				cast.Offset = CFrame.new(100, 0, 0)
+				FastCast:SyncChangesToCast(cast)
+				expect.truthy(
+					Framework.waitFor(function()
+						return (cosmetic.Position - previousPosition).Magnitude > 50
+					end, HIT_TIMEOUT),
+					"runtime Offset was not applied to the cosmetic bullet"
+				)
+				expect.equal(cosmetic.CFrame, cast.CFrame, "cast.CFrame did not reflect the cosmetic offset")
 
-			caster:Destroy()
-			arena:Destroy()
+				caster:Destroy()
+				arena:Destroy()
 		end)
 
 			test("MaxPiercesPerStep reports pierced walls before the terminal hit", function(expect)
@@ -332,7 +332,7 @@ return function()
 				local caster = createParallelCaster(nil, expect)
 				caster:SetFastCastEventsModule(TestEventsModule)
 				task.wait(0.25)
-				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 1200, behavior)
 
 				expect.truthy(
 					Framework.waitFor(function()
