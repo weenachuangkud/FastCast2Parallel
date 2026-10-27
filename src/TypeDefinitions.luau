@@ -386,6 +386,7 @@ export type ActiveCastData = {
 	_Destroying: boolean,
 	Type : "Raycast",
 	CFrame: CFrame,
+	Offset: CFrame,
 	ID: number,
 	Mode: "Parallel",
 }
@@ -406,6 +407,7 @@ export type ActiveBlockcastData = {
 	_Destroying: boolean,
 	Type : "Blockcast",
 	CFrame: CFrame,
+	Offset: CFrame,
 	ID: number,
 	Mode: "Parallel",
 }
@@ -426,6 +428,7 @@ export type ActiveSpherecastData = {
 	_Destroying: boolean,
 	Type : "Spherecast",
 	CFrame: CFrame,
+	Offset: CFrame,
 	ID: number,
 	Mode: "Parallel",
 }
