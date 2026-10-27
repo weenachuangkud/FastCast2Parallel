@@ -56,6 +56,8 @@ end
 -- Runtime, distance, resimulation state, and CFrame remain worker-owned.
 local MutableCastFields = {
 	UserData = true,
+	-- Offset is public and writable; SyncChangesToCast must propagate runtime edits.
+	Offset = true,
 
 	StateInfo = {
 		-- Pause/resume is synchronized through the state-only path. Copying this
