@@ -767,7 +767,7 @@ local function BulkMoveTo()
 		if cosmetic and cosmetic.Parent then
 			bulkCount += 1
 			bulkParts[bulkCount] = cosmetic
-			bulkCframes[bulkCount] = casts_CFrame[id]
+			bulkCframes[bulkCount] = casts_CFrame[id] * (cast.Offset or CFrame.identity)
 		end
 	end
 
@@ -801,7 +801,7 @@ local function UpdateMotor6Ds()
 
 	for id, motor6d in casts_ActiveMotor6Ds do
 		if motor6d and motor6d.Parent then
-			motor6d.Transform = casts_CFrame[id]
+			motor6d.Transform = casts_CFrame[id] * (ActivesRef[id].Offset or CFrame.identity)
 		end
 	end
 end
@@ -1492,7 +1492,7 @@ function ParallelSimulation_Register(cast: any)
 	)
 
 	casts_CFrame[id] = CFrame.new(position)
-	cast.CFrame = casts_CFrame[id]
+	cast.CFrame = casts_CFrame[id] * (cast.Offset or CFrame.identity)
 
 	if CurrentMovementMode == "Motor6D"
 		and MovementEnabled
