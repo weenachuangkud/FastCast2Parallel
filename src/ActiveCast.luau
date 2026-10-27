@@ -55,6 +55,7 @@ function ActiveCast.createCastData(
 			MaxLifetime = behavior.MaxLifetime,
 			IsPaused = false,
 			DistanceCovered = 0,
+			MaxPiercesPerStep = behavior.MaxPiercesPerStep or 1,
 			HighFidelitySegmentSize = behavior.HighFidelitySegmentSize,
 			HighFidelityBehavior = behavior.HighFidelityBehavior,
 			IsActivelyResimulating = false,
@@ -94,6 +95,7 @@ function ActiveCast.createCastData(
 		CFrame = CFrame.new(origin),
 		ID = activeCastID,
 		Mode = "Parallel",
+		Offset = behavior.InitialOffset or CFrame.identity,
 	}
 
 	if _parallel then
@@ -124,7 +126,9 @@ function ActiveCast.createCastData(
 		if behavior.CloneTemplate == true then
 			basePart = basePart:Clone()
 		end
-		basePart.CFrame = if direction ~= Vector3.new() then CFrame.new(origin, origin + direction) else CFrame.new(origin)
+		local initialCFrame = if direction ~= Vector3.new() then CFrame.new(origin, origin + direction) else CFrame.new(origin)
+		basePart.CFrame = initialCFrame * cast.Offset
+		cast.CFrame = initialCFrame * cast.Offset
 		basePart.Parent = behavior.CosmeticBulletContainer
 
 		cast.RayInfo.CosmeticBulletObject = basePart
@@ -134,10 +138,22 @@ function ActiveCast.createCastData(
 		targetContainer = behavior.CosmeticBulletContainer
 	end
 
-	if behavior.AutoIgnoreContainer == true and targetContainer ~= nil then
+	if behavior.AutoIgnoreContainer == true then
 		local ignoreList = cast.RayInfo.Parameters.FilterDescendantsInstances
-		if not table.find(ignoreList, targetContainer) then
+		local changed = false
+
+		if targetContainer ~= nil and not table.find(ignoreList, targetContainer) then
 			table.insert(ignoreList, targetContainer)
+			changed = true
+		end
+
+		local cosmetic = cast.RayInfo.CosmeticBulletObject
+		if cosmetic ~= nil and not table.find(ignoreList, cosmetic) then
+			table.insert(ignoreList, cosmetic)
+			changed = true
+		end
+
+		if changed then
 			cast.RayInfo.Parameters.FilterDescendantsInstances = ignoreList
 		end
 	end
