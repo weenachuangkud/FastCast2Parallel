@@ -102,7 +102,7 @@ end
 -- code; do not remove the retry policy or collapse it to one attempt. Every
 -- attempt must use a fresh scene and caster, clean them up, and still fail after
 -- all attempts if the expected behavior is never observed.
-local function retryUnreliableTest(
+local function retry(
 	attempts: number,
 	delayBetweenAttempts: number,
 	runAttempt: (number) -> boolean
@@ -271,7 +271,7 @@ return function()
 
 			registerParallelCastTypes(test)
 			test("RaycastParams filters the first wall and hits the next", function(expect)
-			local succeeded, lastFailure = retryUnreliableTest(3, 0.1, function(attempt)
+			local succeeded, lastFailure = retry(3, 0.1, function(attempt)
 				local arena = createArena()
 				local ignoredWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 4))
 				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 6))
