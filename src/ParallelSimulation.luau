@@ -1492,7 +1492,7 @@ function ParallelSimulation_Register(cast: any)
 	)
 
 	casts_CFrame[id] = CFrame.new(position)
-	cast.CFrame = casts_CFrame[id] * (cast.Offset or CFrame.identity)
+	cast.CFrame = casts_CFrame[id] * (cast.Offset or CFrame.identity) * (cast.Offset or CFrame.identity)
 
 	if CurrentMovementMode == "Motor6D"
 		and MovementEnabled
@@ -1704,7 +1704,7 @@ local function UpdateCasts(delta: number)
 		if cast then
 			cast.StateInfo.TotalRuntime = casts_TotalRunTime[id]
 			cast.StateInfo.DistanceCovered = casts_DistanceCovered[id]
-			cast.CFrame = casts_CFrame[id]
+			cast.CFrame = casts_CFrame[id] * (cast.Offset or CFrame.identity)
 		end
 	end
 
