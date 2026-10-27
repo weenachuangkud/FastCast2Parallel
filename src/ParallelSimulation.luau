@@ -1101,13 +1101,42 @@ local function SimulateCast(
 	local worldRoot = rayInfo.WorldRoot
 	local handler = castHandlers[variant.CastType]
 
-	local result = handler(
-		worldRoot,
-		lastPoint,
-		displacement,
-		rayInfo.Parameters,
-		variant
-	)
+	-- Match serial behavior: allow a configured number of ray attempts per
+	-- simulation step, queueing pierces and continuing from just beyond each hit.
+	-- The final non-piercing result (if any) is handled as the normal hit below.
+	local endpoint = lastPoint + displacement
+	local rayOrigin = lastPoint
+	local unitDirection = displacement / displacementMagnitude
+	local pierceResults = {}
+	local result = nil
+	local canPierce, castTerminatingfn = GetEventCallbacks(id)
+	local maxPiercesPerStep = math.max(1, math.floor(cast.StateInfo.MaxPiercesPerStep or 1))
+
+	for _ = 1, maxPiercesPerStep do
+		local remainingDisplacement = endpoint - rayOrigin
+		if remainingDisplacement.Magnitude <= EPSILON then
+			break
+		end
+
+		result = handler(
+			worldRoot,
+			rayOrigin,
+			remainingDisplacement,
+			rayInfo.Parameters,
+			variant
+		)
+
+		if not result or result.Instance == rayInfo.CosmeticBulletObject then
+			break
+		end
+
+		if not ShouldPierce(id, result, velocity, canPierce) then
+			break
+		end
+
+		table.insert(pierceResults, result)
+		rayOrigin = result.Position + unitDirection * RAY_SEARCH_OFFSET
+	end
 
 	local rayDisplacement = if result
 		then (result.Position - lastPoint).Magnitude
@@ -1118,7 +1147,6 @@ local function SimulateCast(
 	-- Build the midpoint transform directly instead of multiplying two
 	-- CFrames. lookAlong avoids losing direction when origin + direction
 	-- rounds back to origin at large world coordinates.
-	local unitDirection = displacement / displacementMagnitude
 	casts_CFrame[id] = CFrame.lookAlong(
 		lastPoint + unitDirection * (rayDisplacement * 0.5),
 		unitDirection
@@ -1137,6 +1165,10 @@ local function SimulateCast(
 	end
 
 	casts_DistanceCovered[id] += rayDisplacement
+
+	for _, pierceResult in ipairs(pierceResults) do
+		QueuePierce(id, pierceResult, velocity, false)
+	end
 
 	if delta > 0 and casts_VisualizeCasts[id] then
 		QueueVisualizeSegment(
@@ -1169,28 +1201,6 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if result.Instance == rayInfo.CosmeticBulletObject then
-		return false
-	end
-
-	local canPierce, castTerminatingfn = GetEventCallbacks(id)
-
-	-- ------------------------------------------------------------------------
-	-- Pierce.
-	-- ------------------------------------------------------------------------
-
-	if ShouldPierce(
-		id,
-		result,
-		velocity,
-		canPierce
-		) then
-		QueuePierce(
-			id,
-			result,
-			velocity,
-			false
-		)
-
 		return false
 	end
 
