@@ -113,6 +113,7 @@ local casts_CastType = {} :: { [number]: number }
 local casts_CastVariant = {} :: { [number]: CastVariants }
 
 local casts_MaxDistance = {} :: { [number]: number }
+local casts_MaxPiercesPerStep = {} :: { [number]: number }
 local casts_RayDisplacement = {} :: { [number]: number }
 
 local casts_ActiveMotor6Ds = {} :: { [number]: Motor6D }
@@ -1111,7 +1112,7 @@ local function SimulateCast(
 	local pierceResults = {}
 	local result = nil
 	local canPierce, castTerminatingfn = GetEventCallbacks(id)
-	local maxPiercesPerStep = math.max(1, math.floor(cast.StateInfo.MaxPiercesPerStep or 1))
+	local maxPiercesPerStep = casts_MaxPiercesPerStep[id] or 1
 
 	for _ = 1, maxPiercesPerStep do
 		local remainingDisplacement = endpoint - rayOrigin
@@ -1442,6 +1443,7 @@ function ParallelSimulation_Register(cast: any)
 	casts_MaxDistance[id] =
 		cast.RayInfo.MaxDistance
 		or DEFAULT_MAX_DISTANCE
+	casts_MaxPiercesPerStep[id] = math.max(1, math.floor(cast.StateInfo.MaxPiercesPerStep or 1))
 
 	table.insert(casts_ID, id)
 	casts_ID_Index[id] = #casts_ID
@@ -1544,6 +1546,7 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_CastVariant[castID] = nil
 
 	casts_MaxDistance[castID] = nil
+	casts_MaxPiercesPerStep[castID] = nil
 	casts_RayDisplacement[castID] = nil
 
 	if casts_ActiveMotor6Ds[castID] then
