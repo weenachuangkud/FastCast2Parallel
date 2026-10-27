@@ -770,7 +770,8 @@ local function BulkMoveTo()
 		if cosmetic and cosmetic.Parent then
 			bulkCount += 1
 			bulkParts[bulkCount] = cosmetic
-			bulkCframes[bulkCount] = casts_CFrame[id] * (cast.Offset or CFrame.identity)
+			local cast = ActivesRef[id]
+			bulkCframes[bulkCount] = casts_CFrame[id] * (cast and cast.Offset or CFrame.identity)
 		end
 	end
 
