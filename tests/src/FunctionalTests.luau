@@ -312,20 +312,25 @@ return function()
 			test("MaxPiercesPerStep reports pierced walls before the terminal hit", function(expect)
 				local arena = createArena(expect)
 				local firstWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 2))
-				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local secondWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -19), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.MaxPiercesPerStep = 2
-				behavior.UserData = { PierceAll = true }
+				behavior.MaxPiercesPerStep = 3
+				behavior.UserData = { PierceAll = true, TerminalWall = targetWall }
 
 				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
-				local piercedFirstWall = false
-				local hitTargetWall = false
+				local eventOrder = {}
 				local connection = signal.Event:Connect(function(name, _cast, result)
-					if name == "Pierced" and result and result.Instance == firstWall then
-						piercedFirstWall = true
-					elseif name == "Hit" and result and result.Instance == targetWall then
-						hitTargetWall = true
+					if result and (
+						result.Instance == firstWall
+						or result.Instance == secondWall
+						or result.Instance == targetWall
+					) then
+						table.insert(eventOrder, {
+							name = name,
+							instance = result.Instance,
+						})
 					end
 				end)
 
@@ -336,10 +341,16 @@ return function()
 
 				expect.truthy(
 					Framework.waitFor(function()
-						return piercedFirstWall and hitTargetWall
+						return #eventOrder >= 3
 					end, HIT_TIMEOUT),
-					"MaxPiercesPerStep did not pierce the first wall and hit the second"
+					"MaxPiercesPerStep did not report two pierces and a terminal hit"
 				)
+				expect.equal(eventOrder[1].name, "Pierced", "first event was not Pierced")
+				expect.equal(eventOrder[1].instance, firstWall, "first pierced wall was incorrect")
+				expect.equal(eventOrder[2].name, "Pierced", "second event was not Pierced")
+				expect.equal(eventOrder[2].instance, secondWall, "second pierced wall was incorrect")
+				expect.equal(eventOrder[3].name, "Hit", "terminal event was not Hit")
+				expect.equal(eventOrder[3].instance, targetWall, "terminal hit was on the wrong wall")
 
 				connection:Disconnect()
 				caster:Destroy()
