@@ -1044,19 +1044,21 @@ local function ResimulateHit(
 
 		local subDirection = subVelocity * timeIncrement
 
-		-- Only offset after the previous subcast pierced
+		-- Only offset after the previous subcast pierced.
 		local subOrigin = if lastPierced
 			then subPosition + subVelocity.Unit * RAY_SEARCH_OFFSET
 			else subPosition
-
 		lastPierced = false
 
-		local subResult = castHandler(
-			targetWorldRoot,
+		local subResult, subDidHit, subPierceCount = CastSegment(
+			id,
+			casts_ResimPierceResults[id],
 			subOrigin,
 			subDirection,
-			casts_RayInfo[id].Parameters,
-			casts_CastVariant[id]
+			subVelocity,
+			targetWorldRoot,
+			castHandler,
+			canPierce
 		)
 
 		if casts_VisualizeCasts[id] then
@@ -1070,24 +1072,10 @@ local function ResimulateHit(
 			)
 		end
 
-		if not subResult then
-			continue
-		end
+		QueueSegmentPierces(id, casts_ResimPierceResults[id], subVelocity, true)
+		lastPierced = subPierceCount > 0
 
-		if ShouldPierce(
-			id,
-			subResult,
-			subVelocity,
-			canPierce
-			) then
-			QueuePierce(
-				id,
-				subResult,
-				subVelocity,
-				true
-			)
-
-			lastPierced = true
+		if not subResult or not subDidHit then
 			continue
 		end
 
