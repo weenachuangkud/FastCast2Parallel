@@ -25,6 +25,8 @@ The functional suite is organized into two sections. Both exercise the **Paralle
 - [ ] Verify enabled public event callbacks and multiple Signal listeners.
 - [ ] Verify event configuration can disable callback channels; for example, setting `UseLengthChanged = true` enables the `LengthChanged` callback.
 - [ ] Check behavior defaults and independent nested configuration.
+- [ ] Verify `InitialOffset` initializes the cosmetic transform and that runtime `Offset` changes propagate through `SyncChangesToCast`.
+- [ ] Verify `MaxPiercesPerStep` emits pierced events before the terminal hit and respects the configured ray-attempt limit.
 - [ ] Switch movement mode and manipulate active cast position, velocity, and acceleration.
 - [ ] Verify `RaycastParams` filtering and `MaxDistance` termination without a hit.
 - [ ] Verify cosmetic template cloning, `CloneTemplate = false`, and ignoring the cosmetic container.
