@@ -256,6 +256,8 @@ export type FastCastBehavior = {
 	MaxDistance: number,
 	MaxLifetime: number?,
 	Acceleration: Vector3,
+	InitialOffset: CFrame,
+	MaxPiercesPerStep: number,
 	HighFidelityBehavior: number,
 	HighFidelitySegmentSize: number,
 	CosmeticBulletTemplate: Instance?,
