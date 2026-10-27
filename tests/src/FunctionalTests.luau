@@ -264,6 +264,88 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("InitialOffset initializes and updates the cosmetic cast transform", function(expect)
+				local arena = createArena(expect)
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local initialOffset = CFrame.new(0, 0, -2) * CFrame.Angles(0, math.rad(90), 0)
+				behavior.InitialOffset = initialOffset
+				behavior.CosmeticBulletTemplate = Instance.new("Part")
+				behavior.CosmeticBulletTemplate.Anchored = true
+				behavior.CosmeticBulletTemplate.Parent = arena
+
+			local firedCast = nil
+			local caster = createParallelCaster({
+				CastFire = function(cast)
+					firedCast = cast
+				end,
+			}, expect)
+
+			fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 30, behavior)
+			expect.truthy(
+				Framework.waitFor(function()
+					return firedCast ~= nil and firedCast.RayInfo.CosmeticBulletObject ~= nil
+				end, HIT_TIMEOUT),
+				"CastFire did not expose the cosmetic cast"
+			)
+
+			local cast = firedCast :: any
+			local cosmetic = cast.RayInfo.CosmeticBulletObject
+			expect.equal(cast.Offset, initialOffset, "InitialOffset was not copied to cast.Offset")
+			expect.equal(cosmetic.CFrame, cast.CFrame, "initial cosmetic transform did not include Offset")
+
+			local previousPosition = cosmetic.Position
+			cast.Offset = CFrame.new(100, 0, 0)
+			FastCast:SyncChangesToCast(cast)
+			expect.truthy(
+				Framework.waitFor(function()
+					return (cosmetic.Position - previousPosition).Magnitude > 50
+				end, HIT_TIMEOUT),
+				"runtime Offset was not applied to the cosmetic bullet"
+			)
+			expect.equal(cosmetic.CFrame, cast.CFrame, "cast.CFrame did not reflect the cosmetic offset")
+
+			caster:Destroy()
+			arena:Destroy()
+		end)
+
+			test("MaxPiercesPerStep reports pierced walls before the terminal hit", function(expect)
+				local arena = createArena(expect)
+				local firstWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 2))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxPiercesPerStep = 2
+				behavior.UserData = { PierceAll = true }
+
+				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
+				local piercedFirstWall = false
+				local hitTargetWall = false
+				local connection = signal.Event:Connect(function(name, _cast, result)
+					if name == "Pierced" and result and result.Instance == firstWall then
+						piercedFirstWall = true
+					elseif name == "Hit" and result and result.Instance == targetWall then
+						hitTargetWall = true
+					end
+				end)
+
+				local caster = createParallelCaster(nil, expect)
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return piercedFirstWall and hitTargetWall
+					end, HIT_TIMEOUT),
+					"MaxPiercesPerStep did not pierce the first wall and hit the second"
+				)
+
+				connection:Disconnect()
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("MaxDistance terminates without reporting a hit", function(expect)
 				local arena = createArena(expect)
 				local container = createContainer(arena)
