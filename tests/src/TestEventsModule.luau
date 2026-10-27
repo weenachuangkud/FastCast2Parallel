@@ -21,8 +21,10 @@ return {
 	Pierced = forward("Pierced"),
 	LengthChanged = forward("LengthChanged"),
 	CastTerminating = forward("CastTerminating"),
-	CanPierce = function()
-		return false
+	CanPierce = function(cast)
+		-- Tests opt into piercing explicitly so the default worker behavior
+		-- remains non-piercing.
+		return cast.UserData ~= nil and cast.UserData.PierceAll == true
 	end,
 	OnStep = function(cast, _deltaTime)
 		-- Test-only hook used to prove OnStep runs before the worker's movement.
