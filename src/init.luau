@@ -135,7 +135,8 @@ local OUTPUT_EVENT_NAMES = {
 	[1] = "LengthChanged",
 	[2] = "Hit",
 	[3] = "Pierced",
-	[4] = "CastTerminating"
+	[4] = "CastTerminating",
+	[5] = "OnStep"
 }
 
 --[[
