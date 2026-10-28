@@ -1045,8 +1045,7 @@ local function ResimulateHit(
 			break
 		end
 
-		local subTime =
-			lastDelta + timeIncrement * segmentIndex
+		local subTime = lastDelta + timeIncrement * segmentIndex
 
 		local subPosition = GetPositionAtTime(
 			subTime,
