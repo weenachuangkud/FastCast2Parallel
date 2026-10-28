@@ -745,6 +745,18 @@ local function ShouldUpdateCosmetics(): boolean
 	return cosmeticFrame % interval == 0
 end
 
+local function GetCosmeticCFrame(id: number): CFrame
+	local baseCFrame = casts_CFrame[id]
+	local cast = ActivesRef and ActivesRef[id]
+	local offset = cast and cast.Offset
+
+	if typeof(offset) == "CFrame" then
+		return baseCFrame * offset
+	end
+
+	return baseCFrame
+end
+
 local function BulkMoveTo()
 	if CurrentMovementMode ~= "BulkMoveTo"
 		or not MovementEnabled
@@ -776,9 +788,8 @@ local function BulkMoveTo()
 
 		if cosmetic and cosmetic.Parent then
 			bulkCount += 1
-			bulkParts[bulkCount] = cosmetic
-			local cast = ActivesRef[id]
-			bulkCframes[bulkCount] = casts_CFrame[id] * (cast and cast.Offset or CFrame.identity)
+			bulkParts[bulkCount] = cosmetic			
+			bulkCframes[bulkCount] = GetCosmeticCFrame(id)
 		end
 	end
 
@@ -812,7 +823,7 @@ local function UpdateMotor6Ds()
 
 	for id, motor6d in casts_ActiveMotor6Ds do
 		if motor6d and motor6d.Parent then
-			motor6d.Transform = casts_CFrame[id] * (ActivesRef[id].Offset or CFrame.identity)
+			motor6d.Transform = GetCosmeticCFrame(id)
 		end
 	end
 end
