@@ -1080,9 +1080,18 @@ function FastCast:SetAcceleration(cast: vaildcast, acceleration: Vector3)
 	FastCast:SetAccelerationCast(cast, acceleration)
 end
 
--- Pause/resume synchronizes only the pause flag, avoiding stale snapshot writes.
+-- Route pause changes directly to the worker that owns the cast. The public
+-- cast passed to callbacks is a cross-VM snapshot, so don't rely on its
+-- embedded BindableEvent to synchronize the worker's live state.
 local function SyncPausedState(cast: any)
 	local baseCast = cast.Caster
+	local actor = baseCast and baseCast.Actor
+	if actor then
+		actor:SendMessage("SetCastPaused", cast.ID, cast.StateInfo.IsPaused)
+		return
+	end
+
+	-- Retain a fallback for cast objects without an Actor reference.
 	local syncChange = baseCast and baseCast.SyncChange
 	if syncChange then
 		syncChange:Fire(cast, false, true)
