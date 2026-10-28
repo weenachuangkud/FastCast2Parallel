@@ -752,6 +752,8 @@ return function()
 					end
 				end)
 
+				-- Allow the worker VMs to finish initialization before firing.
+				task.wait(0.25)
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(
