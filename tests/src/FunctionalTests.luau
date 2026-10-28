@@ -130,7 +130,7 @@ local function retry(
 	for attempt = 1, attempts do
 		local succeeded, failure = runAttempt(attempt)
 		if succeeded then
-			return true, lastFailure
+			return true, failure or lastFailure
 		end
 		lastFailure = failure or ("attempt " .. tostring(attempt) .. " failed")
 		if attempt < attempts then
