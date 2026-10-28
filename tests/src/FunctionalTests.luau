@@ -17,6 +17,7 @@ local TestEventsModule = script.Parent:WaitForChild("TestEventsModule")
 
 local CAST_TYPES = { "Raycast", "Blockcast", "Spherecast" }
 local HIT_TIMEOUT = 5
+local VISUALIZE_CASTS = true
 
 local arenaCounter = 0
 
@@ -58,6 +59,7 @@ local function makeBehavior(container: Instance): any
 	local behavior = FastCast.newBehavior()
 	behavior.MaxDistance = 1e6
 	behavior.Acceleration = Vector3.zero
+	behavior.VisualizeCasts = VISUALIZE_CASTS
 	behavior.CosmeticBulletContainer = container
 
 	local params = RaycastParams.new()
@@ -128,7 +130,7 @@ local function registerParallelCastTypes(test: (string, any) -> ())
 			local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 			local container = createContainer(arena)
 			local behavior = makeBehavior(container)
-			behavior.HighFidelityBehavior = FastCast.Enums.HighFidelityBehavior.Always
+			behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
 			behavior.HighFidelitySegmentSize = 1
 
 			local hitInstance = nil
@@ -346,6 +348,8 @@ return function()
 				behavior.InitialOffset = initialOffset
 				behavior.CosmeticBulletTemplate = Instance.new("Part")
 				behavior.CosmeticBulletTemplate.Anchored = true
+				-- Keep the source template out of the cast path; only its clone belongs there.
+				behavior.CosmeticBulletTemplate.Position = Vector3.new(1000, 0, 1000)
 				behavior.CosmeticBulletTemplate.Parent = arena
 
 				local firedCast = nil
@@ -355,7 +359,9 @@ return function()
 					end,
 				}, expect)
 
-				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 30, behavior)
+				-- Zero initial velocity makes the spawn transform stable while the
+				-- asynchronous parallel CastFire event is delivered to this test.
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 0, behavior)
 				expect.truthy(
 					Framework.waitFor(function()
 						return firedCast ~= nil and firedCast.RayInfo.CosmeticBulletObject ~= nil
@@ -369,6 +375,7 @@ return function()
 				expect.equal(cosmetic.CFrame, cast.CFrame, "initial cosmetic transform did not include Offset")
 
 				local previousPosition = cosmetic.Position
+				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -30))
 				cast.Offset = CFrame.new(100, 0, 0)
 				FastCast:SyncChangesToCast(cast)
 
@@ -480,6 +487,16 @@ return function()
 				behavior.CosmeticBulletTemplate = template
 				behavior.CosmeticBulletContainer = container
 				behavior.AutoIgnoreContainer = true
+
+				-- Ensure the wall is in spatial-query data before the asynchronous worker starts.
+				expect.truthy(Framework.waitFor(function()
+					local result = workspace:Raycast(
+						Vector3.zero,
+						Vector3.new(0, 0, -20),
+						behavior.RaycastParams
+					)
+					return result ~= nil and result.Instance == targetWall
+				end, HIT_TIMEOUT), "target wall never became queryable before cosmetic-template cast")
 
 				local hitInstance = nil
 				local caster = createParallelCaster({
@@ -1064,7 +1081,7 @@ return function()
 				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.HighFidelityBehavior = FastCast.Enums.HighFidelityBehavior.Always
+				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
 				behavior.HighFidelitySegmentSize = 1
 
 				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
