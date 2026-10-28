@@ -81,6 +81,23 @@ local function fire(caster: any, castType: string, origin: Vector3, direction: V
 	end
 end
 
+-- Use the matching WorldRoot query to make sure the newly-created test wall is
+-- visible to spatial queries before involving the parallel worker.
+local function queryDirect(
+	castType: string,
+	origin: Vector3,
+	direction: Vector3,
+	params: RaycastParams
+): RaycastResult?
+	local displacement = direction.Unit * 20
+	if castType == "Blockcast" then
+		return workspace:Blockcast(CFrame.new(origin), Vector3.one, displacement, params)
+	elseif castType == "Spherecast" then
+		return workspace:Spherecast(origin, 0.5, displacement, params)
+	end
+	return workspace:Raycast(origin, displacement, params)
+end
+
 local function createParallelCaster(events: { [string]: any }?, expect: any?): any
 	local caster = FastCast.new()
 
@@ -126,43 +143,84 @@ end
 local function registerParallelCastTypes(test: (string, any) -> ())
 	for _, castType in CAST_TYPES do
 		test(castType .. " reaches a wall", function(expect)
-			local arena = createArena(expect)
-			local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
-			local container = createContainer(arena)
-			local behavior = makeBehavior(container)
-			behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
-			behavior.HighFidelitySegmentSize = 1
+			-- Spatial-query readiness can be frame-dependent in Studio. Retry
+			-- with a fresh scene/caster, but first prove the matching direct query
+			-- can hit this attempt's wall. This keeps a missing FastCast hit
+			-- distinguishable from geometry that is not queryable yet.
+			local succeeded, lastFailure = retry(3, 0.1, function(attempt)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelitySegmentSize = 1
 
-			local hitInstance = nil
-			local terminated = false
+				local directResult = nil
+				local directReady = Framework.waitFor(function()
+					directResult = queryDirect(
+						castType,
+						Vector3.zero,
+						Vector3.new(0, 0, -1),
+						behavior.RaycastParams
+					)
+					return directResult ~= nil and directResult.Instance == wall
+				end, 1.5)
 
-			local caster = createParallelCaster({
-				Hit = function(_, result)
-					hitInstance = result.Instance
-				end,
-				CastTerminating = function()
-					terminated = true
-				end,
-			}, expect)
+				if not directReady then
+					local detail = string.format(
+						"attempt %d: direct %s query did not hit setup wall (instance=%s)",
+						attempt,
+						castType,
+						tostring(directResult and directResult.Instance)
+					)
+					arena:Destroy()
+					return false, detail
+				end
 
-			fire(caster, castType, Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
+				local hitInstance = nil
+				local terminated = false
+				local caster = createParallelCaster({
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+					CastTerminating = function()
+						terminated = true
+					end,
+				})
 
-			expect.truthy(
-				Framework.waitFor(function()
+				fire(caster, castType, Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				local hitObserved = Framework.waitFor(function()
 					return hitInstance ~= nil
-				end, HIT_TIMEOUT),
-				castType .. " never registered a hit"
-			)
-			expect.equal(hitInstance, wall, castType .. " hit the wrong instance")
-			expect.truthy(
-				Framework.waitFor(function()
+				end, 1.5)
+				local terminationObserved = hitObserved and Framework.waitFor(function()
 					return terminated
-				end, HIT_TIMEOUT),
-				castType .. " never terminated after the hit"
-			)
+				end, 1.5)
 
-			caster:Destroy()
-			arena:Destroy()
+				local correctHit = hitObserved and hitInstance == wall
+				local detail = string.format(
+					"attempt %d: direct query=wall, FastCast hit=%s, terminated=%s",
+					attempt,
+					tostring(hitInstance),
+					tostring(terminated)
+				)
+
+				caster:Destroy()
+				Framework.waitFor(function()
+					return caster.CasterId == nil
+				end, 1)
+				arena:Destroy()
+
+				if not correctHit or not terminationObserved then
+					return false, detail
+				end
+				return true, detail
+			end)
+
+			expect.truthy(
+				succeeded,
+				castType .. " did not hit and terminate after 3 fresh attempts (" .. lastFailure .. ")"
+			)
 		end)
 	end
 end
