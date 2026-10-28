@@ -676,8 +676,9 @@ local function FireQueuedEvents()
 			end
 
 		elseif numericType == EVT_ON_STEP then
-			local deltaTime = args[1]
-
+			-- Public/main-thread OnStep notifications are dispatched after the
+			-- movement batch. Worker-module OnStep runs synchronously before
+			-- movement in UpdateCasts so it can steer the current simulation step.
 			if eventConfig and eventConfig.UseOnStep then
 				batchCount += 1
 				local record = GetBatchRecord()
@@ -686,21 +687,6 @@ local function FireQueuedEvents()
 				record[3] = args
 				record[4] = 1
 				batch[batchCount] = record
-			end
-
-			if moduleConfig
-				and moduleConfig.UseOnStep
-				and fastCastEvents
-				and type(fastCastEvents.OnStep) == "function"
-			then
-				fastCastEvents.OnStep(cast, deltaTime)
-				casts_Trajectory[castID] = cast.StateInfo.Trajectory
-				if cast.StateInfo.CancelHighResCast then
-					if casts_IsActivelyResimulating[castID] then
-						casts_CancelHighResCast[castID] = true
-					end
-					cast.StateInfo.CancelHighResCast = false
-				end
 			end
 
 		elseif numericType == EVT_CAST_TERMINATING then
@@ -1760,18 +1746,31 @@ local function UpdateCasts(delta: number)
 			trajectory.Acceleration
 		)
 
-		-- Match serial behavior: queue OnStep and dispatch after movement.
 		local eventConfig = casts_FastCastEventsConfig[id]
 		local moduleConfig = casts_FastCastEventsModuleConfig[id]
 		local moduleEvents = casts_FastCastEvents[id]
-		if (eventConfig and eventConfig.UseOnStep)
-			or (
-				moduleConfig
-				and moduleConfig.UseOnStep
-				and moduleEvents
-				and type(moduleEvents.OnStep) == "function"
-			)
+
+		-- Worker-module OnStep is synchronous and precedes movement so a module
+		-- can modify the active trajectory for this update. Do not queue it for
+		-- post-movement dispatch, which would steer only the next step.
+		if moduleConfig
+			and moduleConfig.UseOnStep
+			and moduleEvents
+			and type(moduleEvents.OnStep) == "function"
 		then
+			moduleEvents.OnStep(cast, delta)
+			casts_Trajectory[id] = cast.StateInfo.Trajectory
+
+			if cast.StateInfo.CancelHighResCast then
+				if casts_IsActivelyResimulating[id] then
+					casts_CancelHighResCast[id] = true
+				end
+				cast.StateInfo.CancelHighResCast = false
+			end
+		end
+
+		-- Retain the separate public OnStep notification path, if configured.
+		if eventConfig and eventConfig.UseOnStep then
 			QueueEvent(id, EVT_ON_STEP, delta)
 		end
 
