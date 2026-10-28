@@ -1076,6 +1076,20 @@ return function()
 				-- Let the worker VMs receive the new events module.
 				task.wait(0.25)
 
+				-- Ensure the wall is visible to spatial queries before starting
+				-- the worker cast, so this test isolates module-event forwarding.
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							behavior.RaycastParams
+						)
+						return result ~= nil and result.Instance:IsDescendantOf(arena)
+					end, HIT_TIMEOUT),
+					"events-module test wall never became queryable"
+				)
+
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(
