@@ -615,6 +615,21 @@ return function()
 				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
 				behavior.HighFidelitySegmentSize = 1
 
+				-- Roblox may not include newly-parented parts in spatial queries
+				-- immediately. Ensure the wall is queryable before the worker starts
+				-- advancing this fast cast, or it can pass through during that delay.
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							behavior.RaycastParams
+						)
+						return result ~= nil and result.Instance == wall
+					end, HIT_TIMEOUT),
+					"test wall never became queryable before the high-fidelity cast"
+				)
+
 				local hitInstance = nil
 				local caster = createParallelCaster({
 					Hit = function(_, result)
