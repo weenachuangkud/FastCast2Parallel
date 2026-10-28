@@ -786,15 +786,32 @@ return function()
 					end
 				end)
 
-				-- Allow the worker VMs to finish initialization before firing.
+				-- Allow the worker VMs to finish initialization and the wall to
+				-- enter spatial-query data before testing Signal delivery.
 				task.wait(0.25)
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							behavior.RaycastParams
+						)
+						return result ~= nil and result.Instance == wall
+					end, HIT_TIMEOUT),
+					"signal-test wall never became queryable"
+				)
+
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(
 					Framework.waitFor(function()
 						return firstCount > 0 and secondCount > 0
 					end, HIT_TIMEOUT),
-					"parallel Signal listeners never fired"
+					string.format(
+						"parallel Signal listeners never fired (first=%d, second=%d)",
+						firstCount,
+						secondCount
+					)
 				)
 
 				caster:Destroy()
