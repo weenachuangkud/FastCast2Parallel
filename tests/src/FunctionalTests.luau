@@ -397,7 +397,9 @@ return function()
 				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
 				local eventOrder = {}
 				local connection = signal.Event:Connect(function(name, _cast, result)
-					if result and (
+					-- Only Hit/Pierced events carry a RaycastResult in this argument
+					-- position. Ignore unrelated or malformed signal payloads.
+					if typeof(result) == "RaycastResult" and (
 						result.Instance == firstWall
 						or result.Instance == secondWall
 						or result.Instance == targetWall
