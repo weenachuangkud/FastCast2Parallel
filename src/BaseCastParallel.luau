@@ -60,8 +60,8 @@ local MutableCastFields = {
 	Offset = true,
 
 	StateInfo = {
-		-- Pause/resume is synchronized through the state-only path. Copying this
-		-- field during a full sync can overwrite a newer pause-state message.
+		-- Pause state is intentionally excluded from snapshots; it is applied
+		-- through the dedicated SetCastPaused Actor message.
 		MaxLifetime = true,
 		HighFidelitySegmentSize = true,
 		HighFidelityBehavior = true,
@@ -218,6 +218,17 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 
 	BaseCastInstance = self
 	return self
+end
+
+-- Apply pause changes to the worker-owned live cast. This is called by the
+-- SetCastPaused Actor message sent from the public API.
+function BaseCast:SetCastPaused(activeCastID: number, isPaused: boolean)
+	local cast = self.Actives[activeCastID]
+	if not cast or not cast.StateInfo or cast._Destroying or cast._TerminationQueued then
+		return
+	end
+
+	cast.StateInfo.IsPaused = isPaused
 end
 
 function BaseCast:Raycast(casterId: number, Origin: Vector3, Direction: Vector3, Velocity: Vector3 | number, Behavior: TypeDef.FastCastBehavior, eventModule: ModuleScript?)
