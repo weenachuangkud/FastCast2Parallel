@@ -95,15 +95,12 @@ local casts_CancelHighResCast = {} :: { [number]: boolean }
 
 local casts_Trajectory = {} :: { [number]: TypeDef.CastTrajectory }
 
-local casts_FastCastEventsModuleConfig =
-	{} :: { [number]: TypeDef.FastCastEventsModuleConfig }
+local casts_FastCastEventsModuleConfig = {} :: { [number]: TypeDef.FastCastEventsModuleConfig }
 
-local casts_FastCastEventsConfig =
-	{} :: { [number]: TypeDef.FastCastEventsConfig }
+local casts_FastCastEventsConfig = {} :: { [number]: TypeDef.FastCastEventsConfig }
 
 local casts_VisualizeCasts = {} :: { [number]: boolean }
-local casts_VisualizeCastSettings =
-	{} :: { [number]: TypeDef.VisualizeCastSettings }
+local casts_VisualizeCastSettings = {} :: { [number]: TypeDef.VisualizeCastSettings }
 
 local casts_RayInfo = {} :: { [number]: TypeDef.CastRayInfo }
 local casts_UserData = {} :: { [number]: any }
@@ -574,7 +571,7 @@ local function FireQueuedEvents()
 	for i = 1, queuedEventsCount do
 		local offset = (i - 1) * EVENT_STRIDE
 		local castID = buffer.readf64(eventMetadata, offset)
-		local numericType = buffer.readu8(eventMetadata, offset + 8)
+		local eventType = buffer.readu8(eventMetadata, offset + 8)
 		local args = argsPool[i]
 
 		local cast = ActivesRef[castID]
@@ -587,7 +584,7 @@ local function FireQueuedEvents()
 		local eventConfig = casts_FastCastEventsConfig[castID]
 		local fastCastEvents = casts_FastCastEvents[castID]
 
-		if numericType == EVT_LENGTH_CHANGED then
+		if eventType == EVT_LENGTH_CHANGED then
 			local lastPoint = args[1]
 			local rayDirection = args[2]
 			local displacement = args[3]
@@ -619,7 +616,7 @@ local function FireQueuedEvents()
 				)
 			end
 
-		elseif numericType == EVT_HIT then
+		elseif eventType == EVT_HIT then
 			local result = args[1]
 			local velocity = args[2]
 			local cosmetic = args[3]
@@ -647,7 +644,7 @@ local function FireQueuedEvents()
 				)
 			end
 
-		elseif numericType == EVT_PIERCED then
+		elseif eventType == EVT_PIERCED then
 			local result = args[1]
 			local velocity = args[2]
 			local cosmetic = args[3]
@@ -675,7 +672,7 @@ local function FireQueuedEvents()
 				)
 			end
 
-		elseif numericType == EVT_ON_STEP then
+		elseif eventType == EVT_ON_STEP then
 			-- Public/main-thread OnStep notifications are dispatched after the
 			-- movement batch. Worker-module OnStep runs synchronously before
 			-- movement in UpdateCasts so it can steer the current simulation step.
@@ -689,7 +686,7 @@ local function FireQueuedEvents()
 				batch[batchCount] = record
 			end
 
-		elseif numericType == EVT_CAST_TERMINATING then
+		elseif eventType == EVT_CAST_TERMINATING then
 			local callback = args[1]
 
 			if cast._Destroying then
