@@ -89,6 +89,10 @@ actor:BindToMessage("SetMovementModeEnabled", function(enabled: boolean, mode: "
 	BaseCast:SetMovementModeEnabled(enabled, mode)
 end)
 
+actor:BindToMessage("SetCastPaused", function(activeCastID: number, isPaused: boolean)
+	BaseCast:SetCastPaused(activeCastID, isPaused)
+end)
+
 actor:BindToMessage("StopSimulation", function()
 	BaseCast:StopSimulation()
 end)
