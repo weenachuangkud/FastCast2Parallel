@@ -128,6 +128,8 @@ local function registerParallelCastTypes(test: (string, any) -> ())
 			local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 			local container = createContainer(arena)
 			local behavior = makeBehavior(container)
+			behavior.HighFidelityBehavior = FastCast.Enums.HighFidelityBehavior.Always
+			behavior.HighFidelitySegmentSize = 1
 
 			local hitInstance = nil
 			local terminated = false
@@ -1062,6 +1064,8 @@ return function()
 				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
+				behavior.HighFidelityBehavior = FastCast.Enums.HighFidelityBehavior.Always
+				behavior.HighFidelitySegmentSize = 1
 
 				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
 				local received = {}
