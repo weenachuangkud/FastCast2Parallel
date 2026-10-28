@@ -58,6 +58,7 @@ local EVT_LENGTH_CHANGED = 1
 local EVT_HIT = 2
 local EVT_PIERCED = 3
 local EVT_CAST_TERMINATING = 4
+local EVT_ON_STEP = 5
 
 --[[
 	Shoutout to DrSinek for some code
@@ -125,11 +126,6 @@ local casts_ID_Index = {} :: { [number]: number }
 
 local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
 
--- Cached per-cast "does anyone care about this event?" flags.
--- Precomputed at registration so the hot path avoids config lookups and,
--- more importantly, avoids queueing events nobody listens to.
-local casts_WantLengthChanged = {} :: { [number]: boolean }
-local casts_WantOnStep = {} :: { [number]: boolean }
 local casts_HasCosmetic = {} :: { [number]: boolean }
 local castsWithCosmetics: number = 0
 
@@ -679,6 +675,34 @@ local function FireQueuedEvents()
 				)
 			end
 
+		elseif numericType == EVT_ON_STEP then
+			local deltaTime = args[1]
+
+			if eventConfig and eventConfig.UseOnStep then
+				batchCount += 1
+				local record = GetBatchRecord()
+				record[1] = EVT_ON_STEP
+				record[2] = cast
+				record[3] = args
+				record[4] = 1
+				batch[batchCount] = record
+			end
+
+			if moduleConfig
+				and moduleConfig.UseOnStep
+				and fastCastEvents
+				and type(fastCastEvents.OnStep) == "function"
+			then
+				fastCastEvents.OnStep(cast, deltaTime)
+				casts_Trajectory[castID] = cast.StateInfo.Trajectory
+				if cast.StateInfo.CancelHighResCast then
+					if casts_IsActivelyResimulating[castID] then
+						casts_CancelHighResCast[castID] = true
+					end
+					cast.StateInfo.CancelHighResCast = false
+				end
+			end
+
 		elseif numericType == EVT_CAST_TERMINATING then
 			local callback = args[1]
 
@@ -1203,7 +1227,17 @@ local function SimulateCast(
 		unitDirection
 	)
 
-	if casts_WantLengthChanged[id] then
+	local eventConfig = casts_FastCastEventsConfig[id]
+	local moduleConfig = casts_FastCastEventsModuleConfig[id]
+	local moduleEvents = casts_FastCastEvents[id]
+	if (eventConfig and eventConfig.UseLengthChanged)
+		or (
+			moduleConfig
+			and moduleConfig.UseLengthChanged
+			and moduleEvents
+			and moduleEvents.LengthChanged
+		)
+	then
 		QueueEvent(
 			id,
 			EVT_LENGTH_CHANGED,
@@ -1524,25 +1558,6 @@ function ParallelSimulation_Register(cast: any)
 		casts_FastCastEvents[id] = nil
 	end
 
-	local eventConfig = casts_FastCastEventsConfig[id]
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
-	local moduleEvents = casts_FastCastEvents[id]
-
-	casts_WantLengthChanged[id] =
-		(eventConfig ~= nil and eventConfig.UseLengthChanged == true)
-		or (
-			moduleConfig ~= nil
-			and moduleConfig.UseLengthChanged == true
-			and moduleEvents ~= nil
-			and moduleEvents.LengthChanged ~= nil
-		)
-
-	casts_WantOnStep[id] =
-		moduleConfig ~= nil
-		and moduleConfig.UseOnStep == true
-		and moduleEvents ~= nil
-		and type(moduleEvents.OnStep) == "function"
-
 	local hasCosmetic = cast.RayInfo.CosmeticBulletObject ~= nil
 	casts_HasCosmetic[id] = hasCosmetic
 	if hasCosmetic then
@@ -1593,8 +1608,6 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_FastCastEventsConfig[castID] = nil
 	casts_FastCastEvents[castID] = nil
 
-	casts_WantLengthChanged[castID] = nil
-	casts_WantOnStep[castID] = nil
 	if casts_HasCosmetic[castID] then
 		castsWithCosmetics -= 1
 	end
@@ -1745,21 +1758,19 @@ local function UpdateCasts(delta: number)
 			trajectory.Acceleration
 		)
 
-		-- OnStep must run on the worker so it can modify the cast before movement.
-		-- It is opt-in to keep the default simulation path lean.
-		if casts_WantOnStep[id] then
-			local events = casts_FastCastEvents[id]
-			local onStep = events and events.OnStep
-			if type(onStep) == "function" then
-				onStep(cast, delta)
-				casts_Trajectory[id] = cast.StateInfo.Trajectory
-				if cast.StateInfo.CancelHighResCast then
-					if casts_IsActivelyResimulating[id] then
-						casts_CancelHighResCast[id] = true
-					end
-					cast.StateInfo.CancelHighResCast = false
-				end
-			end
+		-- Match serial behavior: queue OnStep and dispatch after movement.
+		local eventConfig = casts_FastCastEventsConfig[id]
+		local moduleConfig = casts_FastCastEventsModuleConfig[id]
+		local moduleEvents = casts_FastCastEvents[id]
+		if (eventConfig and eventConfig.UseOnStep)
+			or (
+				moduleConfig
+				and moduleConfig.UseOnStep
+				and moduleEvents
+				and type(moduleEvents.OnStep) == "function"
+			)
+		then
+			QueueEvent(id, EVT_ON_STEP, delta)
 		end
 
 		if not ActivesRef[id] or cast._Destroying or cast.StateInfo.IsPaused then
@@ -1887,25 +1898,6 @@ function ParallelSimulation.SyncCast(
 			casts_FastCastEvents[id] = nil
 		end
 	end
-
-	local eventConfig = casts_FastCastEventsConfig[id]
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
-	local moduleEvents = casts_FastCastEvents[id]
-
-	casts_WantLengthChanged[id] =
-		(eventConfig ~= nil and eventConfig.UseLengthChanged == true)
-		or (
-			moduleConfig ~= nil
-			and moduleConfig.UseLengthChanged == true
-			and moduleEvents ~= nil
-			and moduleEvents.LengthChanged ~= nil
-		)
-
-	casts_WantOnStep[id] =
-		moduleConfig ~= nil
-		and moduleConfig.UseOnStep == true
-		and moduleEvents ~= nil
-		and type(moduleEvents.OnStep) == "function"
 
 	local cosmetic = rayInfo.CosmeticBulletObject
 	local hasCosmetic = cosmetic ~= nil
