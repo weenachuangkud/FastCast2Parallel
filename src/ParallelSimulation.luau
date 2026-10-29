@@ -726,7 +726,7 @@ end
 -- ============================================================================
 
 -- Pre-allocated BulkMoveTo arrays (reused every frame)
-local bulkParts: { Instance } = {}
+local bulkParts: { BasePart } = {}
 local bulkCframes: { CFrame } = {}
 local bulkCount: number = 0
 local previousBulkCount: number = 0
