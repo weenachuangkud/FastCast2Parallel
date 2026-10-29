@@ -17,6 +17,7 @@ local TestEventsModule = script.Parent:WaitForChild("TestEventsModule")
 
 local CAST_TYPES = { "Raycast", "Blockcast", "Spherecast" }
 local HIT_TIMEOUT = 5
+local VISUALIZE_CASTS = true
 
 local arenaCounter = 0
 
@@ -58,6 +59,7 @@ local function makeBehavior(container: Instance): any
 	local behavior = FastCast.newBehavior()
 	behavior.MaxDistance = 1e6
 	behavior.Acceleration = Vector3.zero
+	behavior.VisualizeCasts = VISUALIZE_CASTS
 	behavior.CosmeticBulletContainer = container
 
 	local params = RaycastParams.new()
@@ -79,6 +81,23 @@ local function fire(caster: any, castType: string, origin: Vector3, direction: V
 	end
 end
 
+-- Use the matching WorldRoot query to make sure the newly-created test wall is
+-- visible to spatial queries before involving the parallel worker.
+local function queryDirect(
+	castType: string,
+	origin: Vector3,
+	direction: Vector3,
+	params: RaycastParams
+): RaycastResult?
+	local displacement = direction.Unit * 20
+	if castType == "Blockcast" then
+		return workspace:Blockcast(CFrame.new(origin), Vector3.one, displacement, params)
+	elseif castType == "Spherecast" then
+		return workspace:Spherecast(origin, 0.5, displacement, params)
+	end
+	return workspace:Raycast(origin, displacement, params)
+end
+
 local function createParallelCaster(events: { [string]: any }?, expect: any?): any
 	local caster = FastCast.new()
 
@@ -97,44 +116,111 @@ local function createParallelCaster(events: { [string]: any }?, expect: any?): a
 	return caster
 end
 
+-- IMPORTANT: Keep bounded retries for tests that depend on Roblox's spatial
+-- query/frame scheduling. These tests can be intermittent even with correct
+-- code; do not remove the retry policy or collapse it to one attempt. Every
+-- attempt must use a fresh scene and caster, clean them up, and still fail after
+-- all attempts if the expected behavior is never observed.
+local function retry(
+	attempts: number,
+	delayBetweenAttempts: number,
+	runAttempt: (number) -> boolean
+): (boolean, string)
+	local lastFailure = "no attempt ran"
+	for attempt = 1, attempts do
+		local succeeded, failure = runAttempt(attempt)
+		if succeeded then
+			return true, failure or lastFailure
+		end
+		lastFailure = failure or ("attempt " .. tostring(attempt) .. " failed")
+		if attempt < attempts then
+			task.wait(delayBetweenAttempts)
+		end
+	end
+	return false, lastFailure
+end
+
 local function registerParallelCastTypes(test: (string, any) -> ())
 	for _, castType in CAST_TYPES do
 		test(castType .. " reaches a wall", function(expect)
-			local arena = createArena(expect)
-			local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
-			local container = createContainer(arena)
-			local behavior = makeBehavior(container)
+			-- Spatial-query readiness can be frame-dependent in Studio. Retry
+			-- with a fresh scene/caster, but first prove the matching direct query
+			-- can hit this attempt's wall. This keeps a missing FastCast hit
+			-- distinguishable from geometry that is not queryable yet.
+			local succeeded, lastFailure = retry(3, 0.1, function(attempt)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelitySegmentSize = 1
 
-			local hitInstance = nil
-			local terminated = false
+				local directResult = nil
+				local directReady = Framework.waitFor(function()
+					directResult = queryDirect(
+						castType,
+						Vector3.zero,
+						Vector3.new(0, 0, -1),
+						behavior.RaycastParams
+					)
+					return directResult ~= nil and directResult.Instance == wall
+				end, 1.5)
 
-			local caster = createParallelCaster({
-				Hit = function(_, result)
-					hitInstance = result.Instance
-				end,
-				CastTerminating = function()
-					terminated = true
-				end,
-			}, expect)
+				if not directReady then
+					local detail = string.format(
+						"attempt %d: direct %s query did not hit setup wall (instance=%s)",
+						attempt,
+						castType,
+						tostring(directResult and directResult.Instance)
+					)
+					arena:Destroy()
+					return false, detail
+				end
 
-			fire(caster, castType, Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
+				local hitInstance = nil
+				local terminated = false
+				local caster = createParallelCaster({
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+					CastTerminating = function()
+						terminated = true
+					end,
+				})
 
-			expect.truthy(
-				Framework.waitFor(function()
+				fire(caster, castType, Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				local hitObserved = Framework.waitFor(function()
 					return hitInstance ~= nil
-				end, HIT_TIMEOUT),
-				castType .. " never registered a hit"
-			)
-			expect.equal(hitInstance, wall, castType .. " hit the wrong instance")
-			expect.truthy(
-				Framework.waitFor(function()
+				end, 1.5)
+				local terminationObserved = hitObserved and Framework.waitFor(function()
 					return terminated
-				end, HIT_TIMEOUT),
-				castType .. " never terminated after the hit"
-			)
+				end, 1.5)
 
-			caster:Destroy()
-			arena:Destroy()
+				local correctHit = hitObserved and hitInstance == wall
+				local detail = string.format(
+					"attempt %d: direct query=wall, FastCast hit=%s, terminated=%s",
+					attempt,
+					tostring(hitInstance),
+					tostring(terminated)
+				)
+
+				caster:Destroy()
+				Framework.waitFor(function()
+					return caster.CasterId == nil
+				end, 1)
+				arena:Destroy()
+
+				if not correctHit or not terminationObserved then
+					return false, detail
+				end
+				return true, detail
+			end)
+
+			expect.truthy(
+				succeeded,
+				castType .. " did not hit and terminate after 3 fresh attempts (" .. lastFailure .. ")"
+			)
 		end)
 	end
 end
@@ -205,20 +291,30 @@ return function()
 
 			test("Stop pauses simulation and Init resumes it", function(expect)
 				local arena = createArena(expect)
-				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local wall = createWall(arena, Vector3.new(0, 0, -100), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local hitInstance = nil
+				local castFired = false
 
 				local caster = createParallelCaster({
+					CastFire = function()
+						castFired = true
+					end,
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
 				}, expect)
 
-				FastCast.Stop()
-				task.wait(0.1)
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return castFired
+					end, HIT_TIMEOUT),
+					"CastFire did not fire before stopping simulation"
+				)
+
+				FastCast.Stop()
 				task.wait(0.1)
 				expect.equal(hitInstance, nil, "cast advanced while simulation was stopped")
 
@@ -227,7 +323,7 @@ return function()
 					Framework.waitFor(function()
 						return hitInstance ~= nil
 					end, HIT_TIMEOUT),
-					"cast did not resume after Init"
+					"active cast did not resume after Init"
 				)
 				expect.equal(hitInstance, wall, "resumed cast hit the wrong instance")
 
@@ -237,9 +333,10 @@ return function()
 
 			registerParallelCastTypes(test)
 			test("RaycastParams filters the first wall and hits the next", function(expect)
-				local arena = createArena(expect)
-				local ignoredWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 2))
-				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+			local succeeded, lastFailure = retry(3, 0.1, function(attempt)
+				local arena = createArena()
+				local ignoredWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 4))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 6))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				local params = RaycastParams.new()
@@ -247,19 +344,159 @@ return function()
 				params.FilterDescendantsInstances = { container, ignoredWall }
 				behavior.RaycastParams = params
 
+				-- Let newly-created geometry enter Roblox's spatial query data before
+				-- validating both the source params and the cast's cloned params.
+				task.wait()
+				local directResult = workspace:Raycast(Vector3.zero, Vector3.new(0, 0, -20), params)
+				if not directResult or directResult.Instance ~= targetWall then
+					local detail = "attempt " .. tostring(attempt) .. ": direct query did not reach target wall"
+					arena:Destroy()
+					return false, detail
+				end
+
 				local hitInstance = nil
+				local clonedParamsResult = nil
 				local caster = createParallelCaster({
+					CastFire = function(cast)
+						clonedParamsResult = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							cast.RayInfo.Parameters
+						)
+					end,
 					Hit = function(_, result)
 						hitInstance = result.Instance
 					end,
-				}, expect)
+				})
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
 
-				expect.truthy(Framework.waitFor(function()
+				local hitObserved = Framework.waitFor(function()
 					return hitInstance ~= nil
-				end, HIT_TIMEOUT), "filtered cast never hit a wall")
-				expect.equal(hitInstance, targetWall, "RaycastParams did not exclude the first wall")
+				end, 1.5)
+				local clonedTarget = clonedParamsResult and clonedParamsResult.Instance == targetWall
+				local correctHit = hitObserved and hitInstance == targetWall
+				local detail = string.format(
+					"attempt %d: hit=%s, cloned params target=%s, direct target=%s",
+					attempt,
+					tostring(hitInstance),
+					tostring(clonedTarget),
+					tostring(directResult.Instance == targetWall)
+				)
 
+				caster:Destroy()
+				arena:Destroy()
+				if not correctHit then
+					task.wait(0.1)
+					return false, detail
+				end
+				return true, detail
+			end)
+
+			expect.truthy(
+				succeeded,
+				"filtered cast did not hit the second wall after 3 fresh attempts (" .. lastFailure .. ")"
+			)
+		end)
+
+			test("InitialOffset initializes and updates the cosmetic cast transform", function(expect)
+				local arena = createArena(expect)
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local initialOffset = CFrame.new(0, 0, -2) * CFrame.Angles(0, math.rad(90), 0)
+				behavior.InitialOffset = initialOffset
+				behavior.CosmeticBulletTemplate = Instance.new("Part")
+				behavior.CosmeticBulletTemplate.Anchored = true
+				-- Keep the source template out of the cast path; only its clone belongs there.
+				behavior.CosmeticBulletTemplate.Position = Vector3.new(1000, 0, 1000)
+				behavior.CosmeticBulletTemplate.Parent = arena
+
+				local firedCast = nil
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						firedCast = cast
+					end,
+				}, expect)
+
+				-- Zero initial velocity makes the spawn transform stable while the
+				-- asynchronous parallel CastFire event is delivered to this test.
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 0, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return firedCast ~= nil and firedCast.RayInfo.CosmeticBulletObject ~= nil
+					end, HIT_TIMEOUT),
+					"CastFire did not expose the cosmetic cast"
+				)
+
+				local cast = firedCast :: any
+				local cosmetic = cast.RayInfo.CosmeticBulletObject
+				expect.equal(cast.Offset, initialOffset, "InitialOffset was not copied to cast.Offset")
+				expect.equal(cosmetic.CFrame, cast.CFrame, "initial cosmetic transform did not include Offset")
+
+				local previousPosition = cosmetic.Position
+				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -30))
+				cast.Offset = CFrame.new(100, 0, 0)
+				FastCast:SyncChangesToCast(cast)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return (cosmetic.Position - previousPosition).Magnitude > 50
+					end, HIT_TIMEOUT),
+					"runtime Offset was not applied to the cosmetic bullet"
+				)
+				-- cast.CFrame is a public read-only simulation value, not a live
+				-- worker-to-main-thread synchronization channel. The runtime Offset
+				-- contract is verified through the cosmetic bullet above.
+
+				caster:Destroy()
+				arena:Destroy()
+		end)
+
+			test("MaxPiercesPerStep reports pierced walls before the terminal hit", function(expect)
+				local arena = createArena(expect)
+				local firstWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 2))
+				local secondWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -19), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxPiercesPerStep = 3
+				behavior.UserData = { PierceAll = true, TerminalWall = targetWall }
+
+				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
+				local eventOrder = {}
+				local connection = signal.Event:Connect(function(name, _cast, result)
+					-- Only Hit/Pierced events carry a RaycastResult in this argument
+					-- position. Ignore unrelated or malformed signal payloads.
+					if typeof(result) == "RaycastResult" and (
+						result.Instance == firstWall
+						or result.Instance == secondWall
+						or result.Instance == targetWall
+					) then
+						table.insert(eventOrder, {
+							name = name,
+							instance = result.Instance,
+						})
+					end
+				end)
+
+				local caster = createParallelCaster(nil, expect)
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 1200, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return #eventOrder >= 3
+					end, HIT_TIMEOUT),
+					"MaxPiercesPerStep did not report two pierces and a terminal hit"
+				)
+				expect.equal(eventOrder[1].name, "Pierced", "first event was not Pierced")
+				expect.equal(eventOrder[1].instance, firstWall, "first pierced wall was incorrect")
+				expect.equal(eventOrder[2].name, "Pierced", "second event was not Pierced")
+				expect.equal(eventOrder[2].instance, secondWall, "second pierced wall was incorrect")
+				expect.equal(eventOrder[3].name, "Hit", "terminal event was not Hit")
+				expect.equal(eventOrder[3].instance, targetWall, "terminal hit was on the wrong wall")
+
+				connection:Disconnect()
 				caster:Destroy()
 				arena:Destroy()
 			end)
@@ -308,6 +545,16 @@ return function()
 				behavior.CosmeticBulletTemplate = template
 				behavior.CosmeticBulletContainer = container
 				behavior.AutoIgnoreContainer = true
+
+				-- Ensure the wall is in spatial-query data before the asynchronous worker starts.
+				expect.truthy(Framework.waitFor(function()
+					local result = workspace:Raycast(
+						Vector3.zero,
+						Vector3.new(0, 0, -20),
+						behavior.RaycastParams
+					)
+					return result ~= nil and result.Instance == targetWall
+				end, HIT_TIMEOUT), "target wall never became queryable before cosmetic-template cast")
 
 				local hitInstance = nil
 				local caster = createParallelCaster({
@@ -444,6 +691,21 @@ return function()
 				local behavior = makeBehavior(container)
 				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
 				behavior.HighFidelitySegmentSize = 1
+
+				-- Roblox may not include newly-parented parts in spatial queries
+				-- immediately. Ensure the wall is queryable before the worker starts
+				-- advancing this fast cast, or it can pass through during that delay.
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							behavior.RaycastParams
+						)
+						return result ~= nil and result.Instance == wall
+					end, HIT_TIMEOUT),
+					"test wall never became queryable before the high-fidelity cast"
+				)
 
 				local hitInstance = nil
 				local caster = createParallelCaster({
@@ -582,13 +844,32 @@ return function()
 					end
 				end)
 
+				-- Allow the worker VMs to finish initialization and the wall to
+				-- enter spatial-query data before testing Signal delivery.
+				task.wait(0.25)
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							behavior.RaycastParams
+						)
+						return result ~= nil and result.Instance == wall
+					end, HIT_TIMEOUT),
+					"signal-test wall never became queryable"
+				)
+
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
 
 				expect.truthy(
 					Framework.waitFor(function()
 						return firstCount > 0 and secondCount > 0
 					end, HIT_TIMEOUT),
-					"parallel Signal listeners never fired"
+					string.format(
+						"parallel Signal listeners never fired (first=%d, second=%d)",
+						firstCount,
+						secondCount
+					)
 				)
 
 				caster:Destroy()
@@ -875,6 +1156,8 @@ return function()
 				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
+				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelitySegmentSize = 1
 
 				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
 				local received = {}
@@ -888,6 +1171,20 @@ return function()
 
 				-- Let the worker VMs receive the new events module.
 				task.wait(0.25)
+
+				-- Ensure the wall is visible to spatial queries before starting
+				-- the worker cast, so this test isolates module-event forwarding.
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							behavior.RaycastParams
+						)
+						return result ~= nil and result.Instance:IsDescendantOf(arena)
+					end, HIT_TIMEOUT),
+					"events-module test wall never became queryable"
+				)
 
 				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
 

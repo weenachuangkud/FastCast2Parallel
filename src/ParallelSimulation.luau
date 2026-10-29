@@ -58,6 +58,7 @@ local EVT_LENGTH_CHANGED = 1
 local EVT_HIT = 2
 local EVT_PIERCED = 3
 local EVT_CAST_TERMINATING = 4
+local EVT_ON_STEP = 5
 
 --[[
 	Shoutout to DrSinek for some code
@@ -94,15 +95,12 @@ local casts_CancelHighResCast = {} :: { [number]: boolean }
 
 local casts_Trajectory = {} :: { [number]: TypeDef.CastTrajectory }
 
-local casts_FastCastEventsModuleConfig =
-	{} :: { [number]: TypeDef.FastCastEventsModuleConfig }
+local casts_FastCastEventsModuleConfig = {} :: { [number]: TypeDef.FastCastEventsModuleConfig }
 
-local casts_FastCastEventsConfig =
-	{} :: { [number]: TypeDef.FastCastEventsConfig }
+local casts_FastCastEventsConfig = {} :: { [number]: TypeDef.FastCastEventsConfig }
 
 local casts_VisualizeCasts = {} :: { [number]: boolean }
-local casts_VisualizeCastSettings =
-	{} :: { [number]: TypeDef.VisualizeCastSettings }
+local casts_VisualizeCastSettings = {} :: { [number]: TypeDef.VisualizeCastSettings }
 
 local casts_RayInfo = {} :: { [number]: TypeDef.CastRayInfo }
 local casts_UserData = {} :: { [number]: any }
@@ -113,6 +111,9 @@ local casts_CastType = {} :: { [number]: number }
 local casts_CastVariant = {} :: { [number]: CastVariants }
 
 local casts_MaxDistance = {} :: { [number]: number }
+local casts_MaxPiercesPerStep = {} :: { [number]: number }
+local casts_StepPierceResults = {} :: { [number]: { RaycastResult } }
+local casts_ResimPierceResults = {} :: { [number]: { RaycastResult } }
 local casts_RayDisplacement = {} :: { [number]: number }
 
 local casts_ActiveMotor6Ds = {} :: { [number]: Motor6D }
@@ -122,11 +123,6 @@ local casts_ID_Index = {} :: { [number]: number }
 
 local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
 
--- Cached per-cast "does anyone care about this event?" flags.
--- Precomputed at registration so the hot path avoids config lookups and,
--- more importantly, avoids queueing events nobody listens to.
-local casts_WantLengthChanged = {} :: { [number]: boolean }
-local casts_WantOnStep = {} :: { [number]: boolean }
 local casts_HasCosmetic = {} :: { [number]: boolean }
 local castsWithCosmetics: number = 0
 
@@ -575,7 +571,7 @@ local function FireQueuedEvents()
 	for i = 1, queuedEventsCount do
 		local offset = (i - 1) * EVENT_STRIDE
 		local castID = buffer.readf64(eventMetadata, offset)
-		local numericType = buffer.readu8(eventMetadata, offset + 8)
+		local eventType = buffer.readu8(eventMetadata, offset + 8)
 		local args = argsPool[i]
 
 		local cast = ActivesRef[castID]
@@ -588,7 +584,7 @@ local function FireQueuedEvents()
 		local eventConfig = casts_FastCastEventsConfig[castID]
 		local fastCastEvents = casts_FastCastEvents[castID]
 
-		if numericType == EVT_LENGTH_CHANGED then
+		if eventType == EVT_LENGTH_CHANGED then
 			local lastPoint = args[1]
 			local rayDirection = args[2]
 			local displacement = args[3]
@@ -620,7 +616,7 @@ local function FireQueuedEvents()
 				)
 			end
 
-		elseif numericType == EVT_HIT then
+		elseif eventType == EVT_HIT then
 			local result = args[1]
 			local velocity = args[2]
 			local cosmetic = args[3]
@@ -648,7 +644,7 @@ local function FireQueuedEvents()
 				)
 			end
 
-		elseif numericType == EVT_PIERCED then
+		elseif eventType == EVT_PIERCED then
 			local result = args[1]
 			local velocity = args[2]
 			local cosmetic = args[3]
@@ -676,7 +672,21 @@ local function FireQueuedEvents()
 				)
 			end
 
-		elseif numericType == EVT_CAST_TERMINATING then
+		elseif eventType == EVT_ON_STEP then
+			-- Public/main-thread OnStep notifications are dispatched after the
+			-- movement batch. Worker-module OnStep runs synchronously before
+			-- movement in UpdateCasts so it can steer the current simulation step.
+			if eventConfig and eventConfig.UseOnStep then
+				batchCount += 1
+				local record = GetBatchRecord()
+				record[1] = EVT_ON_STEP
+				record[2] = cast
+				record[3] = args
+				record[4] = 1
+				batch[batchCount] = record
+			end
+
+		elseif eventType == EVT_CAST_TERMINATING then
 			local callback = args[1]
 
 			if cast._Destroying then
@@ -716,7 +726,7 @@ end
 -- ============================================================================
 
 -- Pre-allocated BulkMoveTo arrays (reused every frame)
-local bulkParts: { Instance } = {}
+local bulkParts: { BasePart } = {}
 local bulkCframes: { CFrame } = {}
 local bulkCount: number = 0
 local previousBulkCount: number = 0
@@ -733,6 +743,18 @@ local function ShouldUpdateCosmetics(): boolean
 
 	cosmeticFrame += 1
 	return cosmeticFrame % interval == 0
+end
+
+local function GetCosmeticCFrame(id: number): CFrame
+	local baseCFrame = casts_CFrame[id]
+	local cast = ActivesRef and ActivesRef[id]
+	local offset = cast and cast.Offset
+
+	if typeof(offset) == "CFrame" then
+		return baseCFrame * offset
+	end
+
+	return baseCFrame
 end
 
 local function BulkMoveTo()
@@ -766,8 +788,8 @@ local function BulkMoveTo()
 
 		if cosmetic and cosmetic.Parent then
 			bulkCount += 1
-			bulkParts[bulkCount] = cosmetic
-			bulkCframes[bulkCount] = casts_CFrame[id]
+			bulkParts[bulkCount] = cosmetic			
+			bulkCframes[bulkCount] = GetCosmeticCFrame(id)
 		end
 	end
 
@@ -801,7 +823,7 @@ local function UpdateMotor6Ds()
 
 	for id, motor6d in casts_ActiveMotor6Ds do
 		if motor6d and motor6d.Parent then
-			motor6d.Transform = casts_CFrame[id]
+			motor6d.Transform = GetCosmeticCFrame(id)
 		end
 	end
 end
@@ -904,6 +926,75 @@ local function ShouldPierce(
 	)
 end
 
+-- Mirrors the serial CastSegment contract: a pierced result is retained as the
+-- last result, but only a non-pierced collision sets didHit = true.
+local function CastSegment(
+	id: number,
+	pierceResults: { RaycastResult },
+	origin: Vector3,
+	displacement: Vector3,
+	velocity: Vector3,
+	worldRoot: WorldRoot,
+	castHandler: any,
+	canPierce: TypeDef.CanPierceFunction?
+): (RaycastResult?, boolean, number)
+	table.clear(pierceResults)
+
+	local endpoint = origin + displacement
+	local direction = if displacement.Magnitude > EPSILON then displacement.Unit else Vector3.zero
+	local rayOrigin = origin
+	local lastResult: RaycastResult? = nil
+	local rayInfo = casts_RayInfo[id]
+	local variant = casts_CastVariant[id]
+
+	for _ = 1, casts_MaxPiercesPerStep[id] do
+		local remainingDisplacement = endpoint - rayOrigin
+		if remainingDisplacement.Magnitude <= EPSILON then
+			break
+		end
+
+		local result = castHandler(
+			worldRoot,
+			rayOrigin,
+			remainingDisplacement,
+			rayInfo.Parameters,
+			variant
+		)
+
+		if not result then
+			return nil, false, #pierceResults
+		end
+
+		lastResult = result
+
+		if result.Instance == rayInfo.CosmeticBulletObject then
+			return result, false, #pierceResults
+		end
+
+		if not ShouldPierce(id, result, velocity, canPierce) then
+			return result, true, #pierceResults
+		end
+
+		table.insert(pierceResults, result)
+		rayOrigin = result.Position + direction * RAY_SEARCH_OFFSET
+	end
+
+	return lastResult, false, #pierceResults
+end
+
+local function QueueSegmentPierces(
+	id: number,
+	pierceResults: { RaycastResult },
+	velocity: Vector3,
+	sub: boolean
+): number
+	local pierceCount = #pierceResults
+	for index = 1, pierceCount do
+		QueuePierce(id, pierceResults[index], velocity, sub)
+	end
+	return pierceCount
+end
+
 -- ============================================================================
 -- Automatic high-fidelity resimulation
 -- ============================================================================
@@ -954,8 +1045,7 @@ local function ResimulateHit(
 			break
 		end
 
-		local subTime =
-			lastDelta + timeIncrement * segmentIndex
+		local subTime = lastDelta + timeIncrement * segmentIndex
 
 		local subPosition = GetPositionAtTime(
 			subTime,
@@ -972,19 +1062,21 @@ local function ResimulateHit(
 
 		local subDirection = subVelocity * timeIncrement
 
-		-- Only offset after the previous subcast pierced
+		-- Only offset after the previous subcast pierced.
 		local subOrigin = if lastPierced
 			then subPosition + subVelocity.Unit * RAY_SEARCH_OFFSET
 			else subPosition
-
 		lastPierced = false
 
-		local subResult = castHandler(
-			targetWorldRoot,
+		local subResult, subDidHit, subPierceCount = CastSegment(
+			id,
+			casts_ResimPierceResults[id],
 			subOrigin,
 			subDirection,
-			casts_RayInfo[id].Parameters,
-			casts_CastVariant[id]
+			subVelocity,
+			targetWorldRoot,
+			castHandler,
+			canPierce
 		)
 
 		if casts_VisualizeCasts[id] then
@@ -998,24 +1090,10 @@ local function ResimulateHit(
 			)
 		end
 
-		if not subResult then
-			continue
-		end
+		QueueSegmentPierces(id, casts_ResimPierceResults[id], subVelocity, true)
+		lastPierced = subPierceCount > 0
 
-		if ShouldPierce(
-			id,
-			subResult,
-			subVelocity,
-			canPierce
-			) then
-			QueuePierce(
-				id,
-				subResult,
-				subVelocity,
-				true
-			)
-
-			lastPierced = true
+		if not subResult or not subDidHit then
 			continue
 		end
 
@@ -1059,6 +1137,7 @@ local function SimulateCast(
 		print("Casting for frame - SimulateCast")
 	end
 
+	local cast = ActivesRef[id]
 	local trajectory = casts_Trajectory[id]
 	local rayInfo = casts_RayInfo[id]
 	local variant = casts_CastVariant[id]
@@ -1093,20 +1172,38 @@ local function SimulateCast(
 		* (currentTime - previousTime)
 	local displacementMagnitude = displacement.Magnitude
 
+	-- Never raycast beyond the cast's remaining MaxDistance.
+	local remainingDistance = casts_MaxDistance[id] - casts_DistanceCovered[id]
+	if remainingDistance <= 0 then
+		local _, castTerminatingfn = GetEventCallbacks(id)
+		QueueEvent(id, EVT_CAST_TERMINATING, castTerminatingfn)
+		return true
+	end
+
+	if displacementMagnitude > remainingDistance then
+		displacement = displacement.Unit * remainingDistance
+		displacementMagnitude = remainingDistance
+	end
+
 	if displacementMagnitude <= EPSILON then
 		casts_DistanceCovered[id] += displacementMagnitude
 		return false
 	end
 
+	local unitDirection = displacement / displacementMagnitude
 	local worldRoot = rayInfo.WorldRoot
 	local handler = castHandlers[variant.CastType]
 
-	local result = handler(
-		worldRoot,
+	local canPierce, castTerminatingfn = GetEventCallbacks(id)
+	local result, didHit = CastSegment(
+		id,
+		casts_StepPierceResults[id],
 		lastPoint,
 		displacement,
-		rayInfo.Parameters,
-		variant
+		velocity,
+		worldRoot,
+		handler,
+		canPierce
 	)
 
 	local rayDisplacement = if result
@@ -1118,13 +1215,22 @@ local function SimulateCast(
 	-- Build the midpoint transform directly instead of multiplying two
 	-- CFrames. lookAlong avoids losing direction when origin + direction
 	-- rounds back to origin at large world coordinates.
-	local unitDirection = displacement / displacementMagnitude
 	casts_CFrame[id] = CFrame.lookAlong(
 		lastPoint + unitDirection * (rayDisplacement * 0.5),
 		unitDirection
 	)
 
-	if casts_WantLengthChanged[id] then
+	local eventConfig = casts_FastCastEventsConfig[id]
+	local moduleConfig = casts_FastCastEventsModuleConfig[id]
+	local moduleEvents = casts_FastCastEvents[id]
+	if (eventConfig and eventConfig.UseLengthChanged)
+		or (
+			moduleConfig
+			and moduleConfig.UseLengthChanged
+			and moduleEvents
+			and moduleEvents.LengthChanged
+		)
+	then
 		QueueEvent(
 			id,
 			EVT_LENGTH_CHANGED,
@@ -1137,6 +1243,8 @@ local function SimulateCast(
 	end
 
 	casts_DistanceCovered[id] += rayDisplacement
+
+	QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 
 	if delta > 0 and casts_VisualizeCasts[id] then
 		QueueVisualizeSegment(
@@ -1172,25 +1280,7 @@ local function SimulateCast(
 		return false
 	end
 
-	local canPierce, castTerminatingfn = GetEventCallbacks(id)
-
-	-- ------------------------------------------------------------------------
-	-- Pierce.
-	-- ------------------------------------------------------------------------
-
-	if ShouldPierce(
-		id,
-		result,
-		velocity,
-		canPierce
-		) then
-		QueuePierce(
-			id,
-			result,
-			velocity,
-			false
-		)
-
+	if not didHit then
 		return false
 	end
 
@@ -1332,6 +1422,12 @@ local function SimulateAlwaysHighFidelity(
 		variant
 	)
 
+	local canPierce, castTerminatingfn = GetEventCallbacks(id)
+	local eventConfig = casts_FastCastEventsModuleConfig[id]
+	local canPierceEnabled =
+		canPierce ~= nil
+		and eventConfig ~= nil
+		and eventConfig.UseCanPierce == true
 	local endpoint =
 		resultOfCast
 		and resultOfCast.Position
@@ -1341,9 +1437,11 @@ local function SimulateAlwaysHighFidelity(
 
 	casts_TotalRunTime[id] -= delta
 
+	-- Ceiling guarantees each substep is no longer than the configured
+	-- segment size; floor can leave long segments and undermine Always mode.
 	local segmentCount = math.max(
 		1,
-		math.floor(
+		math.ceil(
 			distance
 				/ casts_HighFidelitySegmentSize[id]
 		)
@@ -1360,6 +1458,7 @@ local function SimulateAlwaysHighFidelity(
 		)
 	end
 
+	local substepStopped = false
 	for segmentIndex = 1, segmentCount do
 		if casts_CancelHighResCast[id] then
 			casts_CancelHighResCast[id] = false
@@ -1384,11 +1483,17 @@ local function SimulateAlwaysHighFidelity(
 		-- or reached MaxDistance; the termination event is processed later
 		-- when the worker flushes its queued events.
 		if SimulateCast(id, timeIncrement) then
+			substepStopped = true
 			break
 		end
 	end
 
 	casts_IsActivelyResimulating[id] = false
+
+	-- Preserve the coarse hit if no refined substep reported it, matching serial.
+	if resultOfCast and not substepStopped and not canPierceEnabled then
+		QueueHit(id, resultOfCast, currentVelocity, false, castTerminatingfn)
+	end
 end
 
 -- ============================================================================
@@ -1430,6 +1535,9 @@ function ParallelSimulation_Register(cast: any)
 	casts_MaxDistance[id] =
 		cast.RayInfo.MaxDistance
 		or DEFAULT_MAX_DISTANCE
+	casts_MaxPiercesPerStep[id] = cast.StateInfo.MaxPiercesPerStep or 1
+	casts_StepPierceResults[id] = {}
+	casts_ResimPierceResults[id] = {}
 
 	table.insert(casts_ID, id)
 	casts_ID_Index[id] = #casts_ID
@@ -1444,25 +1552,6 @@ function ParallelSimulation_Register(cast: any)
 	else
 		casts_FastCastEvents[id] = nil
 	end
-
-	local eventConfig = casts_FastCastEventsConfig[id]
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
-	local moduleEvents = casts_FastCastEvents[id]
-
-	casts_WantLengthChanged[id] =
-		(eventConfig ~= nil and eventConfig.UseLengthChanged == true)
-		or (
-			moduleConfig ~= nil
-			and moduleConfig.UseLengthChanged == true
-			and moduleEvents ~= nil
-			and moduleEvents.LengthChanged ~= nil
-		)
-
-	casts_WantOnStep[id] =
-		moduleConfig ~= nil
-		and moduleConfig.UseOnStep == true
-		and moduleEvents ~= nil
-		and type(moduleEvents.OnStep) == "function"
 
 	local hasCosmetic = cast.RayInfo.CosmeticBulletObject ~= nil
 	casts_HasCosmetic[id] = hasCosmetic
@@ -1480,7 +1569,7 @@ function ParallelSimulation_Register(cast: any)
 	)
 
 	casts_CFrame[id] = CFrame.new(position)
-	cast.CFrame = casts_CFrame[id]
+	cast.CFrame = casts_CFrame[id] * (cast.Offset or CFrame.identity)
 
 	if CurrentMovementMode == "Motor6D"
 		and MovementEnabled
@@ -1514,8 +1603,6 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_FastCastEventsConfig[castID] = nil
 	casts_FastCastEvents[castID] = nil
 
-	casts_WantLengthChanged[castID] = nil
-	casts_WantOnStep[castID] = nil
 	if casts_HasCosmetic[castID] then
 		castsWithCosmetics -= 1
 	end
@@ -1532,6 +1619,9 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_CastVariant[castID] = nil
 
 	casts_MaxDistance[castID] = nil
+	casts_MaxPiercesPerStep[castID] = nil
+	casts_StepPierceResults[castID] = nil
+	casts_ResimPierceResults[castID] = nil
 	casts_RayDisplacement[castID] = nil
 
 	if casts_ActiveMotor6Ds[castID] then
@@ -1653,21 +1743,42 @@ local function UpdateCasts(delta: number)
 			casts_HighFidelitySegmentSize[id] = 0.1
 		end
 
-		-- OnStep must run on the worker so it can modify the cast before movement.
-		-- It is opt-in to keep the default simulation path lean.
-		if casts_WantOnStep[id] then
-			local events = casts_FastCastEvents[id]
-			local onStep = events and events.OnStep
-			if type(onStep) == "function" then
-				onStep(cast, delta)
-				casts_Trajectory[id] = cast.StateInfo.Trajectory
-				if cast.StateInfo.CancelHighResCast then
-					if casts_IsActivelyResimulating[id] then
-						casts_CancelHighResCast[id] = true
-					end
-					cast.StateInfo.CancelHighResCast = false
+		-- Public compatibility with serial ActiveCast: this is the position at
+		-- the start of the current simulation update, before movement is applied.
+		local trajectory = casts_Trajectory[id]
+		cast.PreviousPosition = GetPositionAtTime(
+			casts_TotalRunTime[id] - trajectory.StartTime,
+			trajectory.Origin,
+			trajectory.InitialVelocity,
+			trajectory.Acceleration
+		)
+
+		local eventConfig = casts_FastCastEventsConfig[id]
+		local moduleConfig = casts_FastCastEventsModuleConfig[id]
+		local moduleEvents = casts_FastCastEvents[id]
+
+		-- Worker-module OnStep is synchronous and precedes movement so a module
+		-- can modify the active trajectory for this update. Do not queue it for
+		-- post-movement dispatch, which would steer only the next step.
+		if moduleConfig
+			and moduleConfig.UseOnStep
+			and moduleEvents
+			and type(moduleEvents.OnStep) == "function"
+		then
+			moduleEvents.OnStep(cast, delta)
+			casts_Trajectory[id] = cast.StateInfo.Trajectory
+
+			if cast.StateInfo.CancelHighResCast then
+				if casts_IsActivelyResimulating[id] then
+					casts_CancelHighResCast[id] = true
 				end
+				cast.StateInfo.CancelHighResCast = false
 			end
+		end
+
+		-- Retain the separate public OnStep notification path, if configured.
+		if eventConfig and eventConfig.UseOnStep then
+			QueueEvent(id, EVT_ON_STEP, delta)
 		end
 
 		if not ActivesRef[id] or cast._Destroying or cast.StateInfo.IsPaused then
@@ -1692,7 +1803,7 @@ local function UpdateCasts(delta: number)
 		if cast then
 			cast.StateInfo.TotalRuntime = casts_TotalRunTime[id]
 			cast.StateInfo.DistanceCovered = casts_DistanceCovered[id]
-			cast.CFrame = casts_CFrame[id]
+			cast.CFrame = casts_CFrame[id] * (cast.Offset or CFrame.identity)
 		end
 	end
 
@@ -1785,6 +1896,7 @@ function ParallelSimulation.SyncCast(
 	casts_CastType[id] = variant.CastType
 	casts_CastVariant[id] = variant
 	casts_MaxDistance[id] = rayInfo.MaxDistance or DEFAULT_MAX_DISTANCE
+	casts_MaxPiercesPerStep[id] = stateInfo.MaxPiercesPerStep or 1
 
 	local eventModule = rayInfo.FastCastEventsModule
 	if previousEventModule ~= eventModule then
@@ -1794,25 +1906,6 @@ function ParallelSimulation.SyncCast(
 			casts_FastCastEvents[id] = nil
 		end
 	end
-
-	local eventConfig = casts_FastCastEventsConfig[id]
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
-	local moduleEvents = casts_FastCastEvents[id]
-
-	casts_WantLengthChanged[id] =
-		(eventConfig ~= nil and eventConfig.UseLengthChanged == true)
-		or (
-			moduleConfig ~= nil
-			and moduleConfig.UseLengthChanged == true
-			and moduleEvents ~= nil
-			and moduleEvents.LengthChanged ~= nil
-		)
-
-	casts_WantOnStep[id] =
-		moduleConfig ~= nil
-		and moduleConfig.UseOnStep == true
-		and moduleEvents ~= nil
-		and type(moduleEvents.OnStep) == "function"
 
 	local cosmetic = rayInfo.CosmeticBulletObject
 	local hasCosmetic = cosmetic ~= nil
