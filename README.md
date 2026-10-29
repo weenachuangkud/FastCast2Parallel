@@ -240,31 +240,31 @@ Modify active casts at runtime using the static `FastCast` methods:
 
 ```lua
 -- Read state
-local pos = FastCast2:GetPositionCast(cast)
-local vel = FastCast2:GetVelocityCast(cast)
-local accel = FastCast2:GetAccelerationCast(cast)
+local pos = FastCast2.GetPositionCast(cast)
+local vel = FastCast2.GetVelocityCast(cast)
+local accel = FastCast2.GetAccelerationCast(cast)
 
 -- Modify state (automatically rebases trajectory)
-FastCast2:SetPositionCast(cast, Vector3.new(0, 50, 0))
-FastCast2:SetVelocityCast(cast, Vector3.new(0, 100, 0))
-FastCast2:SetAccelerationCast(cast, Vector3.new(0, -workspace.Gravity, 0))
+FastCast2.SetPositionCast(cast, Vector3.new(0, 50, 0))
+FastCast2.SetVelocityCast(cast, Vector3.new(0, 100, 0))
+FastCast2.SetAccelerationCast(cast, Vector3.new(0, -workspace.Gravity, 0))
 
 -- Shorter aliases for velocity and acceleration
-FastCast2:SetVelocity(cast, Vector3.new(0, 100, 0))
-FastCast2:SetAcceleration(cast, Vector3.new(0, -workspace.Gravity, 0))
+FastCast2.SetVelocity(cast, Vector3.new(0, 100, 0))
+FastCast2.SetAcceleration(cast, Vector3.new(0, -workspace.Gravity, 0))
 
 -- Relative changes
-FastCast2:AddPositionCast(cast, Vector3.new(0, 10, 0))
-FastCast2:AddVelocityCast(cast, Vector3.new(0, 20, 0))
-FastCast2:AddAccelerationCast(cast, Vector3.new(0, -50, 0))
+FastCast2.AddPositionCast(cast, Vector3.new(0, 10, 0))
+FastCast2.AddVelocityCast(cast, Vector3.new(0, 20, 0))
+FastCast2.AddAccelerationCast(cast, Vector3.new(0, -50, 0))
 
 -- Synchronize trajectory edits with the worker. Pause/resume do this automatically.
 FastCast2:SyncChangesToCast(cast)
-FastCast2:PauseCast(cast)
-FastCast2:ResumeCast(cast)
+FastCast2.PauseCast(cast)
+FastCast2.ResumeCast(cast)
 
 -- Terminate a cast early (fires CastTerminating and cleans up)
-FastCast2:TerminateCast(cast)
+FastCast2.TerminateCast(cast)
 ```
 
 > **Tip**: In parallel mode, call `FastCast2:SyncChangesToCast(cast)` after modifying to push changes into the worker VM.
