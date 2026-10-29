@@ -936,7 +936,7 @@ Gets the velocity of an ActiveCast.
 	@within FastCast
 	@return Vector3 -- The current velocity of the ActiveCast.
 ]=]
-function FastCast:GetVelocityCast(cast: vaildcast)
+function FastCast.GetVelocityCast(cast: vaildcast)
 	local currentTrajectory = cast.StateInfo.Trajectory
 	return GetVelocityAtTime(
 		cast.StateInfo.TotalRuntime - currentTrajectory.StartTime,
@@ -955,7 +955,7 @@ Gets the acceleration of an ActiveCast.
 	@return Vector3 -- The current acceleration of the ActiveCast.
 
 ]=]
-function FastCast:GetAccelerationCast(cast: vaildcast)
+function FastCast.GetAccelerationCast(cast: vaildcast)
 	return cast.StateInfo.Trajectory.Acceleration
 end
 
@@ -968,7 +968,7 @@ Gets the position of an ActiveCast.
 	@within FastCast
 	@return Vector3 -- The current position of the ActiveCast.
 ]=]
-function FastCast:GetPositionCast(cast: vaildcast)
+function FastCast.GetPositionCast(cast: vaildcast)
 	local currentTrajectory = cast.StateInfo.Trajectory
 	return GetPositionAtTime(
 		cast.StateInfo.TotalRuntime - currentTrajectory.StartTime,
@@ -988,7 +988,7 @@ Sets the velocity of an ActiveCast to the specified Vector3.
 	@within FastCast
 
 ]=]
-function FastCast:SetVelocityCast(cast: vaildcast, velocity: Vector3)
+function FastCast.SetVelocityCast(cast: vaildcast, velocity: Vector3)
 	ModifyTransformation(cast, velocity, nil, nil)
 end
 
@@ -1002,7 +1002,7 @@ Sets the acceleration of an ActiveCast to the specified Vector3.
 	@within FastCast
 
 ]=]
-function FastCast:SetAccelerationCast(cast: vaildcast, acceleration: Vector3)
+function FastCast.SetAccelerationCast(cast: vaildcast, acceleration: Vector3)
 	ModifyTransformation(cast, nil, acceleration, nil)
 end
 
@@ -1014,7 +1014,7 @@ end
 	@param position Vector3 -- The new position to set.
 	@within FastCast
 ]=]
-function FastCast:SetPositionCast(cast: vaildcast, position: Vector3)
+function FastCast.SetPositionCast(cast: vaildcast, position: Vector3)
 	ModifyTransformation(cast, nil, nil, position)
 end
 
@@ -1028,8 +1028,8 @@ Add position to an ActiveCast with the specified Vector3.
 	@within FastCast
 
 ]=]
-function FastCast:AddPositionCast(cast: vaildcast, position: Vector3)
-	FastCast:SetPositionCast(cast, FastCast:GetPositionCast(cast) + position)
+function FastCast.AddPositionCast(cast: vaildcast, position: Vector3)
+	FastCast.SetPositionCast(cast, FastCast.GetPositionCast(cast) + position)
 end
 
 --[=[
@@ -1042,8 +1042,8 @@ Add velocity to an ActiveCast with the specified Vector3.
 	@within FastCast
 
 ]=]
-function FastCast:AddVelocityCast(cast: vaildcast, velocity: Vector3)
-	FastCast:SetVelocityCast(cast, FastCast:GetVelocityCast(cast) + velocity)
+function FastCast.AddVelocityCast(cast: vaildcast, velocity: Vector3)
+	FastCast.SetVelocityCast(cast, FastCast.GetVelocityCast(cast) + velocity)
 end
 
 --[=[
@@ -1056,8 +1056,8 @@ Add acceleration to an ActiveCast with the specified Vector3.
 	@within FastCast
 
 ]=]
-function FastCast:AddAccelerationCast(cast: vaildcast, acceleration: Vector3)
-	FastCast:SetAccelerationCast(cast, FastCast:GetAccelerationCast(cast) + acceleration)
+function FastCast.AddAccelerationCast(cast: vaildcast, acceleration: Vector3)
+	FastCast.SetAccelerationCast(cast, FastCast.GetAccelerationCast(cast) + acceleration)
 end
 
 --[=[
@@ -1066,8 +1066,8 @@ end
 	@method SetVelocity
 	@within FastCast
 ]=]
-function FastCast:SetVelocity(cast: vaildcast, velocity: Vector3)
-	FastCast:SetVelocityCast(cast, velocity)
+function FastCast.SetVelocity(cast: vaildcast, velocity: Vector3)
+	FastCast.SetVelocityCast(cast, velocity)
 end
 
 --[=[
@@ -1076,8 +1076,8 @@ end
 	@method SetAcceleration
 	@within FastCast
 ]=]
-function FastCast:SetAcceleration(cast: vaildcast, acceleration: Vector3)
-	FastCast:SetAccelerationCast(cast, acceleration)
+function FastCast.SetAcceleration(cast: vaildcast, acceleration: Vector3)
+	FastCast.SetAccelerationCast(cast, acceleration)
 end
 
 -- Route pause changes directly to the worker that owns the cast. The public
@@ -1103,7 +1103,7 @@ end
 	@method PauseCast
 	@within FastCast
 ]=]
-function FastCast:PauseCast(cast: any)
+function FastCast.PauseCast(cast: any)
 	if not cast or not cast.StateInfo or cast._Destroying or cast._TerminationQueued then
 		return
 	end
@@ -1117,7 +1117,7 @@ end
 	@method ResumeCast
 	@within FastCast
 ]=]
-function FastCast:ResumeCast(cast: any)
+function FastCast.ResumeCast(cast: any)
 	if not cast or not cast.StateInfo or cast._Destroying or cast._TerminationQueued then
 		return
 	end
@@ -1154,7 +1154,7 @@ end
 
 	Note: If EndTime is already set, the cast is already terminated and this function returns early.
 ]=]
-function FastCast:TerminateCast(cast: vaildcast)
+function FastCast.TerminateCast(cast: vaildcast)
 	if cast._Destroying or cast._TerminationQueued then
 		return
 	end
