@@ -40,8 +40,7 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 	if cast._Destroying then return end
 	cast._Destroying = true
 
-	local FastCastEventsConfig = cast.StateInfo.FastCastEventsConfig
-	if FastCastEventsConfig and FastCastEventsConfig.UseCastTerminating then
+	if ParallelSimulation.HasCasterEvent(cast.CasterId, "CastTerminating") then
 		cast.Caster.Output:Fire("CastTerminating", cast)
 	end
 
@@ -73,25 +72,6 @@ local MutableCastFields = {
 			Origin = true,
 			InitialVelocity = true,
 			Acceleration = true,
-		},
-
-		FastCastEventsConfig = {
-			UseLengthChanged = true,
-			UseHit = true,
-			UsePierced = true,
-			UseCastTerminating = true,
-			UseCanPierce = true,
-			UseCastFire = true,
-		},
-
-		FastCastEventsModuleConfig = {
-			UseLengthChanged = true,
-			UseHit = true,
-			UsePierced = true,
-			UseCastTerminating = true,
-			UseCanPierce = true,
-			UseCastFire = true,
-			UseOnStep = true,
 		},
 
 		VisualizeCastSettings = {
@@ -152,6 +132,10 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 			self.Actives[activeCastID] = nil
 			ParallelSimulation.Unregister(activeCastID)
 		end
+	end)
+
+	Actor:BindToMessage("SetCasterEvents", function(casterId: number, eventFlags: { [string]: boolean })
+		ParallelSimulation.SetCasterEvents(casterId, eventFlags)
 	end)
 
 	SyncChanges = Instance.new("BindableEvent")
@@ -244,13 +228,10 @@ function BaseCast:Raycast(casterId: number, Origin: Vector3, Direction: Vector3,
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if Behavior.FastCastEventsConfig.UseCastFire then
+	if ParallelSimulation.HasCasterEvent(casterId, "CastFire") then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig
-		and Behavior.FastCastEventsModuleConfig.UseCastFire
-		and eventModule
-	then
+	if eventModule then
 		local moduleEvents = require(eventModule)
 		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
 		if type(castFire) == "function" then
@@ -273,13 +254,10 @@ function BaseCast:Blockcast(casterId: number, Origin: Vector3, Size: Vector3, Di
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if Behavior.FastCastEventsConfig.UseCastFire then
+	if ParallelSimulation.HasCasterEvent(casterId, "CastFire") then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig
-		and Behavior.FastCastEventsModuleConfig.UseCastFire
-		and eventModule
-	then
+	if eventModule then
 		local moduleEvents = require(eventModule)
 		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
 		if type(castFire) == "function" then
@@ -302,13 +280,10 @@ function BaseCast:Spherecast(casterId: number, Origin: Vector3, Radius: number, 
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if Behavior.FastCastEventsConfig.UseCastFire then
+	if ParallelSimulation.HasCasterEvent(casterId, "CastFire") then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig
-		and Behavior.FastCastEventsModuleConfig.UseCastFire
-		and eventModule
-	then
+	if eventModule then
 		local moduleEvents = require(eventModule)
 		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
 		if type(castFire) == "function" then
@@ -352,6 +327,7 @@ function BaseCast:DestroyCaster(casterId: number)
 		end
 	end
 
+	ParallelSimulation.UnregisterCaster(casterId)
 	Output:Fire("CasterDestroyed", casterId)
 end
 
