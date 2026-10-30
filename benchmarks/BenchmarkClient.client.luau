@@ -110,8 +110,6 @@ CastBehavior.CosmeticBulletTemplate = ProjectileTemplate
 
 CastBehavior.VisualizeCasts = Config.VisualizeCasts
 CastBehavior.RaycastParams = CastParams
-CastBehavior.FastCastEventsConfig.UseCastFire = true
-CastBehavior.FastCastEventsConfig.UseCastTerminating = true
 
 --// State
 
