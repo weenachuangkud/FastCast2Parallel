@@ -113,8 +113,6 @@ CastBehavior.CosmeticBulletTemplate =
 	Config.Instanced and ProjectileTemplate or nil
 
 CastBehavior.VisualizeCasts = Config.VisualizeCasts
-CastBehavior.FastCastEventsConfig.UseCastFire = true
-CastBehavior.FastCastEventsConfig.UseCastTerminating = true
 
 --// State
 
