@@ -201,6 +201,8 @@ local function IndexCaster(self, key)
 	return nil
 end
 
+local BindCasterEventSignal
+
 local function NewIndexCaster(self, key, value)
 	if SIGNAL_EVENTS[key] then
 		local events = rawget(self, "_events")
@@ -272,7 +274,7 @@ local DefaultFastCastEventsModule: ModuleScript? = nil
 local DestroyingCasters: { [number]: { caster: any, remaining: number } } = {}
 local ParallelDispatcher = nil
 
-local function BindCasterEventSignal(caster, eventName: string, signal)
+BindCasterEventSignal = function(caster, eventName: string, signal)
 	signal:SetListenerChangedCallback(function(hasListeners: boolean)
 		if rawget(caster, "_destroying") then
 			return
