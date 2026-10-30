@@ -110,16 +110,17 @@ type vaildcast = TypeDef.ActiveCastData | TypeDef.ActiveBlockcastData | TypeDef.
 -- CONSTANTS
 local DEFAULT_CACHE_SIZE = 500
 local DEFAULT_CACHE_HOLDER = workspace
+local EventType = FastCastEnums.EventType
 
 -- Events exposed on a Caster as a Signal. Assigning a function to one of these
 -- names is equivalent to connecting that function to the underlying Signal.
-local SIGNAL_EVENTS = {
-	["CastFire"] = true,
-	["OnStep"] = true,
-	["CastTerminating"] = true,
-	["Hit"] = true,
-	["Pierced"] = true,
-	["LengthChanged"] = true
+local SIGNAL_EVENT_TYPES = {
+	CastFire = EventType.CastFire,
+	OnStep = EventType.OnStep,
+	CastTerminating = EventType.CastTerminating,
+	Hit = EventType.Hit,
+	Pierced = EventType.Pierced,
+	LengthChanged = EventType.LengthChanged
 }
 
 -- CanPierce is a query (it has to return a boolean), so it stays a plain function.
@@ -131,11 +132,11 @@ local QUERY_EVENTS = {
 -- send one "Batch" message per frame containing records tagged with these IDs;
 -- the main thread demuxes them back into the Caster's signals.
 local OUTPUT_EVENT_NAMES = {
-	[1] = "LengthChanged",
-	[2] = "Hit",
-	[3] = "Pierced",
-	[4] = "CastTerminating",
-	[5] = "OnStep"
+	[EventType.LengthChanged] = "LengthChanged",
+	[EventType.Hit] = "Hit",
+	[EventType.Pierced] = "Pierced",
+	[EventType.CastTerminating] = "CastTerminating",
+	[EventType.OnStep] = "OnStep"
 }
 
 --[[
@@ -275,6 +276,7 @@ local DestroyingCasters: { [number]: { caster: any, remaining: number } } = {}
 local ParallelDispatcher = nil
 
 BindCasterEventSignal = function(caster, eventName: string, signal)
+	local eventType = SIGNAL_EVENT_TYPES[eventName]
 	signal:SetListenerFlagChanged(function(hasListeners: boolean)
 		if rawget(caster, "_destroying") then
 			return
@@ -286,11 +288,11 @@ BindCasterEventSignal = function(caster, eventName: string, signal)
 		end
 
 		local eventFlags = rawget(caster, "_eventFlags")
-		if eventFlags[eventName] == hasListeners then
+		if eventFlags[eventType] == hasListeners then
 			return
 		end
 
-		eventFlags[eventName] = hasListeners
+		eventFlags[eventType] = hasListeners
 		if RuntimeInitialized and not RuntimeDestroying and ParallelDispatcher then
 			ParallelDispatcher:DispatchAll("SetCasterEvents", caster.CasterId, table.clone(eventFlags))
 		end
@@ -299,7 +301,7 @@ end
 
 local function BindCasterEventSignals(caster)
 	local events = rawget(caster, "_events")
-	for eventName in SIGNAL_EVENTS do
+	for eventName in SIGNAL_EVENT_TYPES do
 		local signal = events[eventName]
 		if Signal.is(signal) then
 			BindCasterEventSignal(caster, eventName, signal)
@@ -489,12 +491,12 @@ function FastCast.new()
 		CasterId = NextCasterId,
 		_events = NewCasterSignals(),
 		_eventFlags = {
-			CastFire = false,
-			OnStep = false,
-			CastTerminating = false,
-			Hit = false,
-			Pierced = false,
-			LengthChanged = false,
+		[EventType.CastFire] = false,
+		[EventType.OnStep] = false,
+		[EventType.CastTerminating] = false,
+		[EventType.Hit] = false,
+		[EventType.Pierced] = false,
+		[EventType.LengthChanged] = false,
 		},
 		WorldRoot = workspace,
 		FastCastEventsModule = DefaultFastCastEventsModule,
@@ -652,20 +654,21 @@ function FastCast.Init(
 		FastCastModule = script
 	}
 
-	ParallelDispatcher = newDispatcher.new(numWorkers, data, function(eventName: string, ...)
-		if eventName == "Batch" then
+	ParallelDispatcher = newDispatcher.new(numWorkers, data, function(eventType: number, ...)
+		if eventType == EventType.Batch then
 			DispatchOutputBatch(...)
 			return
 		end
 
-		if eventName == "CasterDestroyed" then
+		if eventType == EventType.CasterDestroyed then
 			HandleCasterDestroyed(...)
 			return
 		end
 
 		local cast = select(1, ...)
 		local caster = cast and CasterRegistry[cast.CasterId]
-		local signal = caster and caster[eventName]
+		local signalName = OUTPUT_EVENT_NAMES[eventType]
+		local signal = signalName and caster and caster[signalName]
 		if Signal.is(signal) then
 			signal:Fire(...)
 		end
@@ -1221,8 +1224,8 @@ function FastCast.TerminateCast(cast: vaildcast)
 	cast._Destroying = true
 
 	local publicCaster = CasterRegistry[cast.CasterId]
-	if publicCaster and publicCaster._eventFlags.CastTerminating then
-		caster.Output:Fire("CastTerminating", cast)
+	if publicCaster and publicCaster._eventFlags[EventType.CastTerminating] then
+		caster.Output:Fire(EventType.CastTerminating, cast)
 	end
 
 	caster.Actor:SendMessage("Cleanup", cast.ID)
