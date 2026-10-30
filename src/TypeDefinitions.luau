@@ -65,7 +65,8 @@ export type FastCastSignalEvents = {
 	Pierced: Signal.Signal<OnPiercedFunction>,
 	LengthChanged: Signal.Signal<OnLengthChangedFunction>,
 	CastTerminating: Signal.Signal<OnCastTerminatingFunction>,
-	CastFire: Signal.Signal<OnCastFireFunction>
+	CastFire: Signal.Signal<OnCastFireFunction>,
+	OnStep: Signal.Signal<OnStepFunction>
 }
 
 --[=[
@@ -182,6 +183,7 @@ export type CasterParallel = {
 	Pierced: Signal.Signal<OnPiercedFunction> | OnPiercedFunction,
 	CastTerminating: Signal.Signal<OnCastTerminatingFunction> | OnCastTerminatingFunction,
 	CastFire: Signal.Signal<OnCastFireFunction> | OnCastFireFunction,
+	OnStep: Signal.Signal<OnStepFunction> | OnStepFunction,
 	CasterId: number,
 	FastCastEventsModule: FastCastEventsModule?,
 
@@ -215,38 +217,7 @@ export type CasterParallel = {
 }
 
 --[=[
-	@type FastCastEventsModuleConfig { UseLengthChanged: boolean, UseHit: boolean, UsePierced: boolean, UseCastTerminating: boolean, UseCanPierce: boolean, UseCastFire: boolean }
-	@within TypeDefinitions
-
-	Represents a FastCastBehavior configuration.
-]=]
-export type FastCastEventsModuleConfig = {
-	UseLengthChanged: boolean,
-	UseHit: boolean,
-	UsePierced: boolean,
-	UseCastTerminating: boolean,
-	UseCanPierce: boolean,
-	UseCastFire: boolean,
-	UseOnStep: boolean
-}
-
---[=[
-	@type FastCastEventsConfig { UseLengthChanged: boolean, UseHit: boolean, UsePierced: boolean, UseCastTerminating: boolean, UseCastFire: boolean }
-	@within TypeDefinitions
-
-	Represents a FastCastBehavior configuration.
-]=]
-export type FastCastEventsConfig = {
-	UseLengthChanged: boolean,
-	UseHit: boolean,
-	UsePierced: boolean,
-	UseCastTerminating: boolean,
-	UseCastFire: boolean,
-	UseCanPierce: boolean
-}
-
---[=[
-	@type FastCastBehavior { RaycastParams: RaycastParams?,	MaxDistance: number,	Acceleration: Vector3,	HighFidelityBehavior: number,	HighFidelitySegmentSize: number,	CosmeticBulletTemplate: Instance?,	CosmeticBulletContainer: Instance?,	AutoIgnoreContainer: boolean,	MovementMethod: "BulkMoveTo" | "Transform",	FastCastEventsModuleConfig: FastCastEventsModuleConfig,	VisualizeCasts: boolean, 	VisualizeCastSettings: VisualizeCastSettings,   CloneTemplate: boolean,    FastCastEventsConfig: FastCastEventsConfig,	UserData: any }
+	@type FastCastBehavior { RaycastParams: RaycastParams?,	MaxDistance: number,	Acceleration: Vector3,	HighFidelityBehavior: number,	HighFidelitySegmentSize: number,	CosmeticBulletTemplate: Instance?,	CosmeticBulletContainer: Instance?,	AutoIgnoreContainer: boolean,	MovementMethod: "BulkMoveTo" | "Transform",	,	VisualizeCasts: boolean, 	VisualizeCastSettings: VisualizeCastSettings,   CloneTemplate: boolean,    ,	UserData: any }
 	@within TypeDefinitions
 
 	Represents a FastCastBehavior configuration.
@@ -264,13 +235,13 @@ export type FastCastBehavior = {
 	CosmeticBulletContainer: Instance?,
 	AutoIgnoreContainer: boolean,
 
-	FastCastEventsModuleConfig: FastCastEventsModuleConfig,
+	,
 	VisualizeCasts: boolean, 
 	VisualizeCastSettings: VisualizeCastSettings,
 
 	CloneTemplate: boolean,
 
-	FastCastEventsConfig: FastCastEventsConfig,
+	,
 	UserData: any
 }
 
@@ -289,7 +260,7 @@ export type CastTrajectory = {
 }
 
 --[=[
-	@type CastStateInfo { HighFidelityBehavior: number,	HighFidelitySegmentSize: number,	TotalRuntime: number,	DistanceCovered: number,	IsActivelySimulatingPierce: boolean,	IsActivelyResimulating: boolean,	CancelHighResCast: boolean,	Trajectory: CastTrajectory,	VisualizeCasts: boolean, 	VisualizeCastSettings: VisualizeCastSettings,	FastCastEventsConfig: FastCastEventsConfig,	FastCastEventsModuleConfig: FastCastEventsModuleConfig }
+	@type CastStateInfo { HighFidelityBehavior: number,	HighFidelitySegmentSize: number,	TotalRuntime: number,	DistanceCovered: number,	IsActivelySimulatingPierce: boolean,	IsActivelyResimulating: boolean,	CancelHighResCast: boolean,	Trajectory: CastTrajectory,	VisualizeCasts: boolean, 	VisualizeCastSettings: VisualizeCastSettings,	,	 }
 	@within TypeDefinitions
 
 	Represents cast state tracking data.
@@ -308,9 +279,9 @@ export type CastStateInfo = {
 	VisualizeCasts: boolean,  -- I don't use this anymore
 	VisualizeCastSettings: VisualizeCastSettings,
 
-	FastCastEventsConfig: FastCastEventsConfig,
+	,
 
-	FastCastEventsModuleConfig: FastCastEventsModuleConfig
+	
 }
 
 --[=[
