@@ -68,14 +68,6 @@ function ActiveCast.createCastData(
 				Acceleration = behavior.Acceleration,
 			},
 
-			FastCastEventsConfig = {
-				UseLengthChanged = behavior.FastCastEventsConfig.UseLengthChanged,
-				UseHit = behavior.FastCastEventsConfig.UseHit,
-				UsePierced = behavior.FastCastEventsConfig.UsePierced,
-				UseCastTerminating = behavior.FastCastEventsConfig.UseCastTerminating,
-				UseCanPierce = behavior.FastCastEventsConfig.UseCanPierce
-			},
-
 			VisualizeCasts = behavior.VisualizeCasts,
 			VisualizeCastSettings = behavior.VisualizeCastSettings,
 		},
@@ -97,17 +89,6 @@ function ActiveCast.createCastData(
 		Mode = "Parallel",
 		Offset = behavior.InitialOffset or CFrame.identity,
 	}
-
-	if _parallel then
-		cast.StateInfo.FastCastEventsModuleConfig = {
-			UseLengthChanged = behavior.FastCastEventsModuleConfig.UseLengthChanged,
-			UseHit = behavior.FastCastEventsModuleConfig.UseHit,
-			UsePierced = behavior.FastCastEventsModuleConfig.UsePierced,
-			UseCastTerminating = behavior.FastCastEventsModuleConfig.UseCastTerminating,
-			UseCanPierce = behavior.FastCastEventsModuleConfig.UseCanPierce,
-			UseOnStep = behavior.FastCastEventsModuleConfig.UseOnStep,
-		}
-	end
 
 	if variant.CastType == EnumCastTypes.Blockcast then
 		cast.RayInfo.Size = (variant :: BlockcastVariant).Size
