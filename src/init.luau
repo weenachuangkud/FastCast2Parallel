@@ -205,7 +205,7 @@ end
 local BindCasterEventSignal
 
 local function NewIndexCaster(self, key, value)
-	if SIGNAL_EVENTS[key] then
+	if SIGNAL_EVENT_TYPES[key] then
 		local events = rawget(self, "_events")
 		if not events then
 			events = NewCasterSignals()
