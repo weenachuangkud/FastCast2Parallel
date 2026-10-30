@@ -13,7 +13,11 @@ local ParallelSimulation = require(FastCast2:WaitForChild("ParallelSimulation"))
 local Motor6DCache = require(FastCast2:WaitForChild("Motor6DCache"))
 
 local EnumCastTypes = FastCastEnums.CastType
-local EventType = FastCastEnums.EventType
+
+-- Event type constants (keep these IDs in sync with ParallelSimulation).
+local EVT_CAST_TERMINATING = 4
+local EVT_CAST_FIRE = 6
+local EVT_CASTER_DESTROYED = 8
 
 local BaseCast = {}
 BaseCast.__index = BaseCast
@@ -34,15 +38,15 @@ local function SendCastFire(
 	velocity: Vector3 | number,
 	behavior: TypeDef.FastCastBehavior
 )
-	(cast.Caster :: any).Output:Fire(EventType.CastFire, cast, origin, direction, velocity, behavior)
+	(cast.Caster :: any).Output:Fire(EVT_CAST_FIRE, cast, origin, direction, velocity, behavior)
 end
 
 local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastTerminatingFunction?)
 	if cast._Destroying then return end
 	cast._Destroying = true
 
-	if ParallelSimulation.HasCasterEvent(cast.CasterId, EventType.CastTerminating) then
-		cast.Caster.Output:Fire(EventType.CastTerminating, cast)
+	if ParallelSimulation.HasCasterEvent(cast.CasterId, EVT_CAST_TERMINATING) then
+		cast.Caster.Output:Fire(EVT_CAST_TERMINATING, cast)
 	end
 
 	if castTerminatingFunction then
@@ -229,7 +233,7 @@ function BaseCast:Raycast(casterId: number, Origin: Vector3, Direction: Vector3,
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if ParallelSimulation.HasCasterEvent(casterId, EventType.CastFire) then
+	if ParallelSimulation.HasCasterEvent(casterId, EVT_CAST_FIRE) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
 	if eventModule then
@@ -255,7 +259,7 @@ function BaseCast:Blockcast(casterId: number, Origin: Vector3, Size: Vector3, Di
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if ParallelSimulation.HasCasterEvent(casterId, EventType.CastFire) then
+	if ParallelSimulation.HasCasterEvent(casterId, EVT_CAST_FIRE) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
 	if eventModule then
@@ -281,7 +285,7 @@ function BaseCast:Spherecast(casterId: number, Origin: Vector3, Radius: number, 
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if ParallelSimulation.HasCasterEvent(casterId, EventType.CastFire) then
+	if ParallelSimulation.HasCasterEvent(casterId, EVT_CAST_FIRE) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
 	if eventModule then
@@ -329,7 +333,7 @@ function BaseCast:DestroyCaster(casterId: number)
 	end
 
 	ParallelSimulation.UnregisterCaster(casterId)
-	Output:Fire(EventType.CasterDestroyed, casterId)
+	Output:Fire(EVT_CASTER_DESTROYED, casterId)
 end
 
 function BaseCast:Destroy()
