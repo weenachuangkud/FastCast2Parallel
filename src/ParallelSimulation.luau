@@ -16,6 +16,7 @@ local Config = require(FastCastModule:WaitForChild("Config"))
 
 local DebugLogging = Config.DebugLogging
 local EnumCastTypes = FastCastEnums.CastType
+local EventType = FastCastEnums.EventType
 
 local DEFAULT_MAX_DISTANCE = 1000
 local FC_VIS_OBJ_NAME = "FastCastVisualizationObjects"
@@ -53,12 +54,12 @@ type CastVisualizerVariants =
 	| BlockVisualizerVariant
 	| SphereVisualizerVariant
 
--- Event type constants (numeric IDs avoid string comparison in hot path)
-local EVT_LENGTH_CHANGED = 1
-local EVT_HIT = 2
-local EVT_PIERCED = 3
-local EVT_CAST_TERMINATING = 4
-local EVT_ON_STEP = 5
+-- Numeric event IDs avoid string keys and comparisons in the simulation hot path.
+local EVT_LENGTH_CHANGED = EventType.LengthChanged
+local EVT_HIT = EventType.Hit
+local EVT_PIERCED = EventType.Pierced
+local EVT_CAST_TERMINATING = EventType.CastTerminating
+local EVT_ON_STEP = EventType.OnStep
 
 --[[
 	Shoutout to DrSinek for some code
@@ -95,7 +96,7 @@ local casts_CancelHighResCast = {} :: { [number]: boolean }
 
 local casts_Trajectory = {} :: { [number]: TypeDef.CastTrajectory }
 local casts_CasterId = {} :: { [number]: number }
-local CasterEventFlags = {} :: { [number]: { [string]: boolean } }
+local CasterEventFlags = {} :: { [number]: { [number]: boolean } }
 
 local casts_VisualizeCasts = {} :: { [number]: boolean }
 local casts_VisualizeCastSettings = {} :: { [number]: TypeDef.VisualizeCastSettings }
@@ -532,22 +533,15 @@ end
 -- Event signatures have at most five payload values. Assign all slots so
 -- nil holes cannot leave stale references behind (the # operator is undefined
 -- for sparse arrays), and avoid select/vararg loops in the hot path.
-local function HasCasterEvent(casterId: number, eventName: string): boolean
+local function HasCasterEvent(casterId: number, eventType: number): boolean
 	local eventFlags = CasterEventFlags[casterId]
-	return eventFlags ~= nil and eventFlags[eventName] == true
+	return eventFlags ~= nil and eventFlags[eventType] == true
 end
 
-local function HasCastEvent(castID: number, eventName: string): boolean
+local function HasCastEvent(castID: number, eventType: number): boolean
 	local casterId = casts_CasterId[castID]
-	return casterId ~= nil and HasCasterEvent(casterId, eventName)
+	return casterId ~= nil and HasCasterEvent(casterId, eventType)
 end
-
-local CASTER_EVENT_NAMES = {
-	[EVT_LENGTH_CHANGED] = "LengthChanged",
-	[EVT_HIT] = "Hit",
-	[EVT_PIERCED] = "Pierced",
-	[EVT_ON_STEP] = "OnStep",
-}
 
 local MODULE_EVENT_NAMES = {
 	[EVT_LENGTH_CHANGED] = "LengthChanged",
@@ -561,8 +555,7 @@ local function ShouldQueueEvent(castID: number, eventType: number): boolean
 		return true
 	end
 
-	local eventName = CASTER_EVENT_NAMES[eventType]
-	if eventName and HasCastEvent(castID, eventName) then
+	if HasCastEvent(castID, eventType) then
 		return true
 	end
 
@@ -630,7 +623,7 @@ local function FireQueuedEvents()
 			local velocity = args[4]
 			local cosmetic = args[5]
 
-			if HasCastEvent(castID, "LengthChanged") then
+			if HasCastEvent(castID, EVT_LENGTH_CHANGED) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_LENGTH_CHANGED
@@ -656,7 +649,7 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if HasCastEvent(castID, "Hit") then
+			if HasCastEvent(castID, EVT_HIT) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_HIT
@@ -680,7 +673,7 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if HasCastEvent(castID, "Pierced") then
+			if HasCastEvent(castID, EVT_PIERCED) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_PIERCED
@@ -703,7 +696,7 @@ local function FireQueuedEvents()
 			-- Public/main-thread OnStep notifications are dispatched after the
 			-- movement batch. Worker-module OnStep runs synchronously before
 			-- movement in UpdateCasts so it can steer the current simulation step.
-			if HasCastEvent(castID, "OnStep") then
+			if HasCastEvent(castID, EVT_ON_STEP) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_ON_STEP
@@ -722,7 +715,7 @@ local function FireQueuedEvents()
 
 			cast._Destroying = true
 
-			if HasCastEvent(castID, "CastTerminating") then
+			if HasCastEvent(castID, EVT_CAST_TERMINATING) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_CAST_TERMINATING
@@ -1237,7 +1230,7 @@ local function SimulateCast(
 	)
 
 	local moduleEvents = casts_FastCastEvents[id]
-	if HasCastEvent(id, "LengthChanged")
+	if HasCastEvent(id, EVT_LENGTH_CHANGED)
 		or (moduleEvents and type(moduleEvents.LengthChanged) == "function")
 	then
 		QueueEvent(
@@ -1772,7 +1765,7 @@ local function UpdateCasts(delta: number)
 		end
 
 		-- Retain the separate public OnStep notification path, if configured.
-		if HasCastEvent(id, "OnStep") then
+		if HasCastEvent(id, EVT_ON_STEP) then
 			QueueEvent(id, EVT_ON_STEP, delta)
 		end
 
@@ -1860,12 +1853,12 @@ function ParallelSimulation.Register(cast: any)
 	ParallelSimulation_Register(cast)
 end
 
-function ParallelSimulation.SetCasterEvents(casterId: number, eventFlags: { [string]: boolean })
+function ParallelSimulation.SetCasterEvents(casterId: number, eventFlags: { [number]: boolean })
 	CasterEventFlags[casterId] = table.clone(eventFlags)
 end
 
-function ParallelSimulation.HasCasterEvent(casterId: number, eventName: string): boolean
-	return HasCasterEvent(casterId, eventName)
+function ParallelSimulation.HasCasterEvent(casterId: number, eventType: number): boolean
+	return HasCasterEvent(casterId, eventType)
 end
 
 function ParallelSimulation.UnregisterCaster(casterId: number)
