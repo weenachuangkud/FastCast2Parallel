@@ -538,7 +538,7 @@ local function HasCasterEvent(casterId: number, eventType: number): boolean
 	return eventFlags ~= nil and eventFlags[eventType] == true
 end
 
-local function HasCastEvent(castID: number, eventType: number): boolean
+local function HasCasterEventForCast(castID: number, eventType: number): boolean
 	local casterId = casts_CasterId[castID]
 	return casterId ~= nil and HasCasterEvent(casterId, eventType)
 end
@@ -555,7 +555,7 @@ local function ShouldQueueEvent(castID: number, eventType: number): boolean
 		return true
 	end
 
-	if HasCastEvent(castID, eventType) then
+	if HasCasterEventForCast(castID, eventType) then
 		return true
 	end
 
@@ -623,7 +623,7 @@ local function FireQueuedEvents()
 			local velocity = args[4]
 			local cosmetic = args[5]
 
-			if HasCastEvent(castID, EVT_LENGTH_CHANGED) then
+			if HasCasterEventForCast(castID, EVT_LENGTH_CHANGED) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_LENGTH_CHANGED
@@ -649,7 +649,7 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if HasCastEvent(castID, EVT_HIT) then
+			if HasCasterEventForCast(castID, EVT_HIT) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_HIT
@@ -673,7 +673,7 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if HasCastEvent(castID, EVT_PIERCED) then
+			if HasCasterEventForCast(castID, EVT_PIERCED) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_PIERCED
@@ -696,7 +696,7 @@ local function FireQueuedEvents()
 			-- Public/main-thread OnStep notifications are dispatched after the
 			-- movement batch. Worker-module OnStep runs synchronously before
 			-- movement in UpdateCasts so it can steer the current simulation step.
-			if HasCastEvent(castID, EVT_ON_STEP) then
+			if HasCasterEventForCast(castID, EVT_ON_STEP) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_ON_STEP
@@ -715,7 +715,7 @@ local function FireQueuedEvents()
 
 			cast._Destroying = true
 
-			if HasCastEvent(castID, EVT_CAST_TERMINATING) then
+			if HasCasterEventForCast(castID, EVT_CAST_TERMINATING) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_CAST_TERMINATING
@@ -1230,7 +1230,7 @@ local function SimulateCast(
 	)
 
 	local moduleEvents = casts_FastCastEvents[id]
-	if HasCastEvent(id, EVT_LENGTH_CHANGED)
+	if HasCasterEventForCast(id, EVT_LENGTH_CHANGED)
 		or (moduleEvents and type(moduleEvents.LengthChanged) == "function")
 	then
 		QueueEvent(
@@ -1765,7 +1765,7 @@ local function UpdateCasts(delta: number)
 		end
 
 		-- Retain the separate public OnStep notification path, if configured.
-		if HasCastEvent(id, EVT_ON_STEP) then
+		if HasCasterEventForCast(id, EVT_ON_STEP) then
 			QueueEvent(id, EVT_ON_STEP, delta)
 		end
 
