@@ -16,7 +16,6 @@ local Config = require(FastCastModule:WaitForChild("Config"))
 
 local DebugLogging = Config.DebugLogging
 local EnumCastTypes = FastCastEnums.CastType
-local EventType = FastCastEnums.EventType
 
 local DEFAULT_MAX_DISTANCE = 1000
 local FC_VIS_OBJ_NAME = "FastCastVisualizationObjects"
@@ -54,12 +53,13 @@ type CastVisualizerVariants =
 	| BlockVisualizerVariant
 	| SphereVisualizerVariant
 
--- Numeric event IDs avoid string keys and comparisons in the simulation hot path.
-local EVT_LENGTH_CHANGED = EventType.LengthChanged
-local EVT_HIT = EventType.Hit
-local EVT_PIERCED = EventType.Pierced
-local EVT_CAST_TERMINATING = EventType.CastTerminating
-local EVT_ON_STEP = EventType.OnStep
+-- Event type constants (numeric IDs avoid string comparisons in the hot path).
+local EVT_LENGTH_CHANGED = 1
+local EVT_HIT = 2
+local EVT_PIERCED = 3
+local EVT_CAST_TERMINATING = 4
+local EVT_ON_STEP = 5
+local EVT_BATCH = 7
 
 --[[
 	Shoutout to DrSinek for some code
@@ -735,7 +735,7 @@ local function FireQueuedEvents()
 	end
 
 	if batchCount > 0 then
-		BaseCastRef.Output:Fire(EventType.Batch, batch)
+		BaseCastRef.Output:Fire(EVT_BATCH, batch)
 	end
 end
 
