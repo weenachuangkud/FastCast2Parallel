@@ -27,7 +27,7 @@ export type Signal<T...> = {
 	Once: (self: Signal<T...>, callback: (T...) -> ()) -> Connection,
 	Wait: (self: Signal<T...>) -> T...,
 	Fire: (self: Signal<T...>, T...) -> (),
-	SetListenerChangedCallback: (self: Signal<T...>, callback: ((boolean) -> ())?) -> (),
+	SetListenerFlagChanged: (self: Signal<T...>, callback: ((boolean) -> ())?) -> (),
 	DisconnectAll: (self: Signal<T...>) -> (),
 	Destroy: (self: Signal<T...>) -> (),
 }
@@ -123,7 +123,7 @@ function Signal.new()
 	}, Signal)
 end
 
-function Signal:SetListenerChangedCallback(callback)
+function Signal:SetListenerFlagChanged(callback)
 	assert(callback == nil or type(callback) == "function", "Signal callback must be a function")
 	self._listenerChangedCallback = callback
 	if callback then
