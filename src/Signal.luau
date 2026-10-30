@@ -27,6 +27,7 @@ export type Signal<T...> = {
 	Once: (self: Signal<T...>, callback: (T...) -> ()) -> Connection,
 	Wait: (self: Signal<T...>) -> T...,
 	Fire: (self: Signal<T...>, T...) -> (),
+	HasListeners: (self: Signal<T...>) -> boolean,
 	SetListenerFlagChanged: (self: Signal<T...>, callback: ((boolean) -> ())?) -> (),
 	DisconnectAll: (self: Signal<T...>) -> (),
 	Destroy: (self: Signal<T...>) -> (),
@@ -121,6 +122,10 @@ function Signal.new()
 		_listenerChangedCallback = nil,
 		_destroyed = false,
 	}, Signal)
+end
+
+function Signal:HasListeners(): boolean
+	return self._listenerCount > 0
 end
 
 function Signal:SetListenerFlagChanged(callback)
