@@ -217,7 +217,7 @@ export type CasterParallel = {
 }
 
 --[=[
-	@type FastCastBehavior { RaycastParams: RaycastParams?,	MaxDistance: number,	Acceleration: Vector3,	HighFidelityBehavior: number,	HighFidelitySegmentSize: number,	CosmeticBulletTemplate: Instance?,	CosmeticBulletContainer: Instance?,	AutoIgnoreContainer: boolean,	MovementMethod: "BulkMoveTo" | "Transform",	,	VisualizeCasts: boolean, 	VisualizeCastSettings: VisualizeCastSettings,   CloneTemplate: boolean,    ,	UserData: any }
+	@type FastCastBehavior { RaycastParams: RaycastParams?, MaxDistance: number, Acceleration: Vector3, HighFidelityBehavior: number, HighFidelitySegmentSize: number, CosmeticBulletTemplate: Instance?, CosmeticBulletContainer: Instance?, AutoIgnoreContainer: boolean, VisualizeCasts: boolean, VisualizeCastSettings: VisualizeCastSettings, CloneTemplate: boolean, UserData: any }
 	@within TypeDefinitions
 
 	Represents a FastCastBehavior configuration.
@@ -235,13 +235,11 @@ export type FastCastBehavior = {
 	CosmeticBulletContainer: Instance?,
 	AutoIgnoreContainer: boolean,
 
-	,
 	VisualizeCasts: boolean, 
 	VisualizeCastSettings: VisualizeCastSettings,
 
 	CloneTemplate: boolean,
 
-	,
 	UserData: any
 }
 
@@ -260,7 +258,7 @@ export type CastTrajectory = {
 }
 
 --[=[
-	@type CastStateInfo { HighFidelityBehavior: number,	HighFidelitySegmentSize: number,	TotalRuntime: number,	DistanceCovered: number,	IsActivelySimulatingPierce: boolean,	IsActivelyResimulating: boolean,	CancelHighResCast: boolean,	Trajectory: CastTrajectory,	VisualizeCasts: boolean, 	VisualizeCastSettings: VisualizeCastSettings,	,	 }
+	@type CastStateInfo { HighFidelityBehavior: number, HighFidelitySegmentSize: number, TotalRuntime: number, DistanceCovered: number, IsActivelySimulatingPierce: boolean, IsActivelyResimulating: boolean, CancelHighResCast: boolean, Trajectory: CastTrajectory, VisualizeCasts: boolean, VisualizeCastSettings: VisualizeCastSettings }
 	@within TypeDefinitions
 
 	Represents cast state tracking data.
@@ -279,9 +277,7 @@ export type CastStateInfo = {
 	VisualizeCasts: boolean,  -- I don't use this anymore
 	VisualizeCastSettings: VisualizeCastSettings,
 
-	,
 
-	
 }
 
 --[=[
