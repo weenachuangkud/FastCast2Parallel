@@ -229,7 +229,7 @@ local function NewIndexCaster(self, key, value)
 		elseif Signal.is(value) then
 			local previousSignal = events[key]
 			if Signal.is(previousSignal) and previousSignal ~= value then
-				previousSignal:SetListenerChangedCallback(nil)
+				previousSignal:SetListenerFlagChanged(nil)
 			end
 
 			local legacy = rawget(self, "_legacy")
@@ -275,7 +275,7 @@ local DestroyingCasters: { [number]: { caster: any, remaining: number } } = {}
 local ParallelDispatcher = nil
 
 BindCasterEventSignal = function(caster, eventName: string, signal)
-	signal:SetListenerChangedCallback(function(hasListeners: boolean)
+	signal:SetListenerFlagChanged(function(hasListeners: boolean)
 		if rawget(caster, "_destroying") then
 			return
 		end
