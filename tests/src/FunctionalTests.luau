@@ -230,8 +230,8 @@ return function()
 		Framework.describe("FastCastBehavior", function(test)
 			test("newBehavior returns the documented defaults", function(expect)
 				local behavior = FastCast.newBehavior()
-				local events = behavior.FastCastEventsConfig
-				local moduleEvents = behavior.FastCastEventsModuleConfig
+				expect.equal(behavior.FastCastEventsConfig, nil, "FastCastEventsConfig should be removed")
+				expect.equal(behavior.FastCastEventsModuleConfig, nil, "FastCastEventsModuleConfig should be removed")
 
 				expect.equal(behavior.MaxDistance, 1000, "MaxDistance default changed")
 				expect.equal(behavior.MaxLifetime, nil, "MaxLifetime should be unlimited by default")
@@ -248,31 +248,14 @@ return function()
 				expect.equal(behavior.CloneTemplate, true, "CloneTemplate should be enabled by default")
 				expect.equal(behavior.VisualizeCasts, false, "VisualizeCasts should be disabled by default")
 				expect.equal(type(behavior.VisualizeCastSettings), "table", "visualization settings are missing")
-				expect.equal(events.UseLengthChanged, false, "LengthChanged should be opt-in")
-				expect.equal(events.UseHit, true, "Hit should be enabled by default")
-				expect.equal(events.UsePierced, true, "Pierced should be enabled by default")
-				expect.equal(events.UseCastTerminating, true, "CastTerminating should be enabled by default")
-				expect.equal(events.UseCanPierce, true, "CanPierce should be enabled by default")
-				expect.equal(events.UseCastFire, true, "CastFire should be enabled by default")
-				expect.equal(moduleEvents.UseLengthChanged, false, "module LengthChanged should be opt-in")
-				expect.equal(moduleEvents.UseHit, true, "module Hit should be enabled by default")
-				expect.equal(moduleEvents.UsePierced, true, "module Pierced should be enabled by default")
-				expect.equal(moduleEvents.UseCastTerminating, true, "module CastTerminating should be enabled by default")
-				expect.equal(moduleEvents.UseCanPierce, true, "module CanPierce should be enabled by default")
-				expect.equal(moduleEvents.UseCastFire, true, "module CastFire should be enabled by default")
-				expect.equal(moduleEvents.UseOnStep, false, "module OnStep should be opt-in")
 			end)
 
 			test("newBehavior returns independent nested configuration", function(expect)
 				local first = FastCast.newBehavior()
 				local second = FastCast.newBehavior()
 
-				first.FastCastEventsConfig.UseHit = false
-				first.FastCastEventsModuleConfig.UseHit = false
 				first.VisualizeCastSettings.Debug_SegmentSize = 99
 
-				expect.equal(second.FastCastEventsConfig.UseHit, true, "event config was shared between behaviors")
-				expect.equal(second.FastCastEventsModuleConfig.UseHit, true, "module event config was shared between behaviors")
 				expect.truthy(
 					second.VisualizeCastSettings.Debug_SegmentSize ~= 99,
 					"visualization settings were shared between behaviors"
@@ -601,36 +584,52 @@ return function()
 				arena:Destroy()
 			end)
 
-			test("event configuration can disable callback channels", function(expect)
+			test("caster event listeners are detected and synchronized automatically", function(expect)
 				local arena = createArena(expect)
 				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.FastCastEventsConfig.UseHit = false
-				behavior.FastCastEventsConfig.UseCastFire = false
-				behavior.FastCastEventsConfig.UseCastTerminating = false
-
 				local hitCount = 0
 				local castFireCount = 0
 				local terminationCount = 0
-				local caster = createParallelCaster({
-					Hit = function()
-						hitCount += 1
-					end,
-					CastFire = function()
-						castFireCount += 1
-					end,
-					CastTerminating = function()
-						terminationCount += 1
-					end,
-				}, expect)
+				local caster = createParallelCaster(nil, expect)
+
+				local hitConnection = caster.Hit:Connect(function()
+					hitCount += 1
+				end)
+				local castFireConnection = caster.CastFire:Connect(function()
+					castFireCount += 1
+				end)
+				local terminationConnection = caster.CastTerminating:Connect(function()
+					terminationCount += 1
+				end)
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return hitCount == 1 and castFireCount == 1 and terminationCount == 1
+				end, HIT_TIMEOUT), "connected caster event listeners did not receive events")
+
+				hitConnection:Disconnect()
+				castFireConnection:Disconnect()
+				terminationConnection:Disconnect()
+				task.wait(0.1)
+
 				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
 				task.wait(0.2)
+				expect.equal(hitCount, 1, "disconnected Hit listener still fired")
+				expect.equal(castFireCount, 1, "disconnected CastFire listener still fired")
+				expect.equal(terminationCount, 1, "disconnected CastTerminating listener still fired")
 
-				expect.equal(hitCount, 0, "disabled Hit callback still fired")
-				expect.equal(castFireCount, 0, "disabled CastFire callback still fired")
-				expect.equal(terminationCount, 0, "disabled CastTerminating callback still fired")
+				local secondHitConnection = caster.Hit:Connect(function()
+					hitCount += 1
+				end)
+				task.wait(0.1)
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+				expect.truthy(Framework.waitFor(function()
+					return hitCount == 2
+				end, HIT_TIMEOUT), "new Hit listener was not synchronized to the workers")
 
+				secondHitConnection:Disconnect()
 				caster:Destroy()
 				arena:Destroy()
 			end)
@@ -731,7 +730,6 @@ return function()
 				behavior.MaxDistance = 15
 				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
 				behavior.HighFidelitySegmentSize = 1
-				behavior.FastCastEventsConfig.UseCastTerminating = true
 
 				local hitCount = 0
 				local terminationCount = 0
@@ -795,7 +793,6 @@ return function()
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.MaxLifetime = 0
-				behavior.FastCastEventsConfig.UseLengthChanged = true
 
 				local terminationCount = 0
 				local lengthChangedCount = 0
@@ -1081,7 +1078,6 @@ return function()
 				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.FastCastEventsModuleConfig.UseOnStep = true
 				behavior.UserData = {
 					OnStepVelocity = Vector3.new(0, 0, -120),
 				}
@@ -1114,7 +1110,6 @@ return function()
 				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.FastCastEventsModuleConfig.UseOnStep = true
 				behavior.UserData = {
 					OnStepVelocity = Vector3.yAxis * 120,
 				}
@@ -1239,7 +1234,6 @@ return function()
 				local arena = createArena(expect)
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.FastCastEventsConfig.UseCastTerminating = true
 
 				local firedCast = nil
 				local terminationCount = 0
