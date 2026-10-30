@@ -139,7 +139,7 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 		end
 	end)
 
-	Actor:BindToMessage("SetCasterEvents", function(casterId: number, eventFlags: { [string]: boolean })
+	Actor:BindToMessage("SetCasterEvents", function(casterId: number, eventFlags: { [number]: boolean })
 		ParallelSimulation.SetCasterEvents(casterId, eventFlags)
 	end)
 
