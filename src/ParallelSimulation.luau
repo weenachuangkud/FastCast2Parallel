@@ -94,10 +94,8 @@ local casts_IsActivelyResimulating = {} :: { [number]: boolean }
 local casts_CancelHighResCast = {} :: { [number]: boolean }
 
 local casts_Trajectory = {} :: { [number]: TypeDef.CastTrajectory }
-
-local casts_FastCastEventsModuleConfig = {} :: { [number]: TypeDef.FastCastEventsModuleConfig }
-
-local casts_FastCastEventsConfig = {} :: { [number]: TypeDef.FastCastEventsConfig }
+local casts_CasterId = {} :: { [number]: number }
+local CasterEventFlags = {} :: { [number]: { [string]: boolean } }
 
 local casts_VisualizeCasts = {} :: { [number]: boolean }
 local casts_VisualizeCastSettings = {} :: { [number]: TypeDef.VisualizeCastSettings }
@@ -534,6 +532,45 @@ end
 -- Event signatures have at most five payload values. Assign all slots so
 -- nil holes cannot leave stale references behind (the # operator is undefined
 -- for sparse arrays), and avoid select/vararg loops in the hot path.
+local function HasCasterEvent(casterId: number, eventName: string): boolean
+	local eventFlags = CasterEventFlags[casterId]
+	return eventFlags ~= nil and eventFlags[eventName] == true
+end
+
+local function HasCastEvent(castID: number, eventName: string): boolean
+	local casterId = casts_CasterId[castID]
+	return casterId ~= nil and HasCasterEvent(casterId, eventName)
+end
+
+local CASTER_EVENT_NAMES = {
+	[EVT_LENGTH_CHANGED] = "LengthChanged",
+	[EVT_HIT] = "Hit",
+	[EVT_PIERCED] = "Pierced",
+	[EVT_ON_STEP] = "OnStep",
+}
+
+local MODULE_EVENT_NAMES = {
+	[EVT_LENGTH_CHANGED] = "LengthChanged",
+	[EVT_HIT] = "Hit",
+	[EVT_PIERCED] = "Pierced",
+}
+
+local function ShouldQueueEvent(castID: number, eventType: number): boolean
+	-- Terminating events also perform cast cleanup, so they must always be queued.
+	if eventType == EVT_CAST_TERMINATING then
+		return true
+	end
+
+	local eventName = CASTER_EVENT_NAMES[eventType]
+	if eventName and HasCastEvent(castID, eventName) then
+		return true
+	end
+
+	local moduleEventName = MODULE_EVENT_NAMES[eventType]
+	local events = moduleEventName and casts_FastCastEvents[castID]
+	return events ~= nil and type(events[moduleEventName]) == "function"
+end
+
 local function QueueEvent(
 	castID: number,
 	eventType: number,
@@ -543,6 +580,10 @@ local function QueueEvent(
 	arg4: any,
 	arg5: any
 )
+	if not ShouldQueueEvent(castID, eventType) then
+		return
+	end
+
 	local args = GetArgs()
 	args[1] = arg1
 	args[2] = arg2
@@ -580,8 +621,6 @@ local function FireQueuedEvents()
 			continue
 		end
 
-		local moduleConfig = casts_FastCastEventsModuleConfig[castID]
-		local eventConfig = casts_FastCastEventsConfig[castID]
 		local fastCastEvents = casts_FastCastEvents[castID]
 
 		if eventType == EVT_LENGTH_CHANGED then
@@ -591,7 +630,7 @@ local function FireQueuedEvents()
 			local velocity = args[4]
 			local cosmetic = args[5]
 
-			if eventConfig and eventConfig.UseLengthChanged then
+			if HasCastEvent(castID, "LengthChanged") then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_LENGTH_CHANGED
@@ -601,11 +640,7 @@ local function FireQueuedEvents()
 				batch[batchCount] = record
 			end
 
-			if moduleConfig
-				and moduleConfig.UseLengthChanged
-				and fastCastEvents
-				and fastCastEvents.LengthChanged
-			then
+			if fastCastEvents and type(fastCastEvents.LengthChanged) == "function" then
 				fastCastEvents.LengthChanged(
 					cast,
 					lastPoint,
@@ -621,7 +656,7 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if eventConfig and eventConfig.UseHit then
+			if HasCastEvent(castID, "Hit") then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_HIT
@@ -631,11 +666,7 @@ local function FireQueuedEvents()
 				batch[batchCount] = record
 			end
 
-			if moduleConfig
-				and moduleConfig.UseHit
-				and fastCastEvents
-				and fastCastEvents.Hit
-			then
+			if fastCastEvents and type(fastCastEvents.Hit) == "function" then
 				fastCastEvents.Hit(
 					cast,
 					result,
@@ -649,7 +680,7 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if eventConfig and eventConfig.UsePierced then
+			if HasCastEvent(castID, "Pierced") then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_PIERCED
@@ -659,11 +690,7 @@ local function FireQueuedEvents()
 				batch[batchCount] = record
 			end
 
-			if moduleConfig
-				and moduleConfig.UsePierced
-				and fastCastEvents
-				and fastCastEvents.Pierced
-			then
+			if fastCastEvents and type(fastCastEvents.Pierced) == "function" then
 				fastCastEvents.Pierced(
 					cast,
 					result,
@@ -676,7 +703,7 @@ local function FireQueuedEvents()
 			-- Public/main-thread OnStep notifications are dispatched after the
 			-- movement batch. Worker-module OnStep runs synchronously before
 			-- movement in UpdateCasts so it can steer the current simulation step.
-			if eventConfig and eventConfig.UseOnStep then
+			if HasCastEvent(castID, "OnStep") then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_ON_STEP
@@ -695,9 +722,7 @@ local function FireQueuedEvents()
 
 			cast._Destroying = true
 
-			if eventConfig
-				and eventConfig.UseCastTerminating
-			then
+			if HasCastEvent(castID, "CastTerminating") then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_CAST_TERMINATING
@@ -833,22 +858,13 @@ end
 -- ============================================================================
 
 local function GetEventCallbacks(id: number)
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
 	local events = casts_FastCastEvents[id]
-
-	if not moduleConfig or not events then
+	if not events then
 		return nil, nil
 	end
 
-	local canPierce =
-		moduleConfig.UseCanPierce
-		and events.CanPierce
-		or nil
-
-	local terminating =
-		moduleConfig.UseCastTerminating
-		and events.CastTerminating
-		or nil
+	local canPierce = if type(events.CanPierce) == "function" then events.CanPierce else nil
+	local terminating = if type(events.CastTerminating) == "function" then events.CastTerminating else nil
 
 	return canPierce, terminating
 end
@@ -1220,16 +1236,9 @@ local function SimulateCast(
 		unitDirection
 	)
 
-	local eventConfig = casts_FastCastEventsConfig[id]
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
 	local moduleEvents = casts_FastCastEvents[id]
-	if (eventConfig and eventConfig.UseLengthChanged)
-		or (
-			moduleConfig
-			and moduleConfig.UseLengthChanged
-			and moduleEvents
-			and moduleEvents.LengthChanged
-		)
+	if HasCastEvent(id, "LengthChanged")
+		or (moduleEvents and type(moduleEvents.LengthChanged) == "function")
 	then
 		QueueEvent(
 			id,
@@ -1423,11 +1432,7 @@ local function SimulateAlwaysHighFidelity(
 	)
 
 	local canPierce, castTerminatingfn = GetEventCallbacks(id)
-	local eventConfig = casts_FastCastEventsModuleConfig[id]
-	local canPierceEnabled =
-		canPierce ~= nil
-		and eventConfig ~= nil
-		and eventConfig.UseCanPierce == true
+	local canPierceEnabled = canPierce ~= nil
 	local endpoint =
 		resultOfCast
 		and resultOfCast.Position
@@ -1516,10 +1521,7 @@ function ParallelSimulation_Register(cast: any)
 	casts_CancelHighResCast[id] = false
 
 	casts_Trajectory[id] = cast.StateInfo.Trajectory
-
-	casts_FastCastEventsModuleConfig[id] = cast.StateInfo.FastCastEventsModuleConfig
-
-	casts_FastCastEventsConfig[id] = cast.StateInfo.FastCastEventsConfig
+	casts_CasterId[id] = cast.CasterId
 
 	casts_VisualizeCasts[id] = cast.StateInfo.VisualizeCasts
 
@@ -1598,9 +1600,7 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_CancelHighResCast[castID] = nil
 
 	casts_Trajectory[castID] = nil
-
-	casts_FastCastEventsModuleConfig[castID] = nil
-	casts_FastCastEventsConfig[castID] = nil
+	casts_CasterId[castID] = nil
 	casts_FastCastEvents[castID] = nil
 
 	if casts_HasCosmetic[castID] then
@@ -1753,17 +1753,12 @@ local function UpdateCasts(delta: number)
 			trajectory.Acceleration
 		)
 
-		local eventConfig = casts_FastCastEventsConfig[id]
-		local moduleConfig = casts_FastCastEventsModuleConfig[id]
 		local moduleEvents = casts_FastCastEvents[id]
 
 		-- Worker-module OnStep is synchronous and precedes movement so a module
 		-- can modify the active trajectory for this update. Do not queue it for
 		-- post-movement dispatch, which would steer only the next step.
-		if moduleConfig
-			and moduleConfig.UseOnStep
-			and moduleEvents
-			and type(moduleEvents.OnStep) == "function"
+		if moduleEvents and type(moduleEvents.OnStep) == "function"
 		then
 			moduleEvents.OnStep(cast, delta)
 			casts_Trajectory[id] = cast.StateInfo.Trajectory
@@ -1777,7 +1772,7 @@ local function UpdateCasts(delta: number)
 		end
 
 		-- Retain the separate public OnStep notification path, if configured.
-		if eventConfig and eventConfig.UseOnStep then
+		if HasCastEvent(id, "OnStep") then
 			QueueEvent(id, EVT_ON_STEP, delta)
 		end
 
@@ -1865,6 +1860,18 @@ function ParallelSimulation.Register(cast: any)
 	ParallelSimulation_Register(cast)
 end
 
+function ParallelSimulation.SetCasterEvents(casterId: number, eventFlags: { [string]: boolean })
+	CasterEventFlags[casterId] = table.clone(eventFlags)
+end
+
+function ParallelSimulation.HasCasterEvent(casterId: number, eventName: string): boolean
+	return HasCasterEvent(casterId, eventName)
+end
+
+function ParallelSimulation.UnregisterCaster(casterId: number)
+	CasterEventFlags[casterId] = nil
+end
+
 function ParallelSimulation.Unregister(castID: number)
 	ParallelSimulation_Unregister(castID)
 end
@@ -1888,8 +1895,6 @@ function ParallelSimulation.SyncCast(
 	casts_UserData[id] = cast.UserData
 	casts_HighFidelitySegmentSize[id] = stateInfo.HighFidelitySegmentSize or 0.1
 	casts_HighFidelityBehavior[id] = stateInfo.HighFidelityBehavior or 0
-	casts_FastCastEventsModuleConfig[id] = stateInfo.FastCastEventsModuleConfig
-	casts_FastCastEventsConfig[id] = stateInfo.FastCastEventsConfig
 	casts_VisualizeCasts[id] = stateInfo.VisualizeCasts
 	casts_VisualizeCastSettings[id] = stateInfo.VisualizeCastSettings
 	casts_RayInfo[id] = rayInfo
