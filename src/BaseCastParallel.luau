@@ -13,6 +13,7 @@ local ParallelSimulation = require(FastCast2:WaitForChild("ParallelSimulation"))
 local Motor6DCache = require(FastCast2:WaitForChild("Motor6DCache"))
 
 local EnumCastTypes = FastCastEnums.CastType
+local EventType = FastCastEnums.EventType
 
 local BaseCast = {}
 BaseCast.__index = BaseCast
@@ -33,15 +34,15 @@ local function SendCastFire(
 	velocity: Vector3 | number,
 	behavior: TypeDef.FastCastBehavior
 )
-	(cast.Caster :: any).Output:Fire("CastFire", cast, origin, direction, velocity, behavior)
+	(cast.Caster :: any).Output:Fire(EventType.CastFire, cast, origin, direction, velocity, behavior)
 end
 
 local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastTerminatingFunction?)
 	if cast._Destroying then return end
 	cast._Destroying = true
 
-	if ParallelSimulation.HasCasterEvent(cast.CasterId, "CastTerminating") then
-		cast.Caster.Output:Fire("CastTerminating", cast)
+	if ParallelSimulation.HasCasterEvent(cast.CasterId, EventType.CastTerminating) then
+		cast.Caster.Output:Fire(EventType.CastTerminating, cast)
 	end
 
 	if castTerminatingFunction then
@@ -228,7 +229,7 @@ function BaseCast:Raycast(casterId: number, Origin: Vector3, Direction: Vector3,
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if ParallelSimulation.HasCasterEvent(casterId, "CastFire") then
+	if ParallelSimulation.HasCasterEvent(casterId, EventType.CastFire) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
 	if eventModule then
@@ -328,7 +329,7 @@ function BaseCast:DestroyCaster(casterId: number)
 	end
 
 	ParallelSimulation.UnregisterCaster(casterId)
-	Output:Fire("CasterDestroyed", casterId)
+	Output:Fire(EventType.CasterDestroyed, casterId)
 end
 
 function BaseCast:Destroy()
