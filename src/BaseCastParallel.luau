@@ -255,7 +255,7 @@ function BaseCast:Blockcast(casterId: number, Origin: Vector3, Size: Vector3, Di
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if ParallelSimulation.HasCasterEvent(casterId, "CastFire") then
+	if ParallelSimulation.HasCasterEvent(casterId, EventType.CastFire) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
 	if eventModule then
@@ -281,7 +281,7 @@ function BaseCast:Spherecast(casterId: number, Origin: Vector3, Radius: number, 
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if ParallelSimulation.HasCasterEvent(casterId, "CastFire") then
+	if ParallelSimulation.HasCasterEvent(casterId, EventType.CastFire) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
 	if eventModule then
