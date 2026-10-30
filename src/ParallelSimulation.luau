@@ -735,7 +735,7 @@ local function FireQueuedEvents()
 	end
 
 	if batchCount > 0 then
-		BaseCastRef.Output:Fire("Batch", batch)
+		BaseCastRef.Output:Fire(EventType.Batch, batch)
 	end
 end
 
