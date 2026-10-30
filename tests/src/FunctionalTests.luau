@@ -472,12 +472,12 @@ return function()
 					end, HIT_TIMEOUT),
 					"MaxPiercesPerStep did not report two pierces and a terminal hit"
 				)
-				expect.equal(eventOrder[1].name, "Pierced", "first event was not Pierced")
-				expect.equal(eventOrder[1].instance, firstWall, "first pierced wall was incorrect")
-				expect.equal(eventOrder[2].name, "Pierced", "second event was not Pierced")
-				expect.equal(eventOrder[2].instance, secondWall, "second pierced wall was incorrect")
-				expect.equal(eventOrder[3].name, "Hit", "terminal event was not Hit")
-				expect.equal(eventOrder[3].instance, targetWall, "terminal hit was on the wrong wall")
+				expect.equal(eventOrder[1].name, "Hit", "Hit should dispatch before Pierced, matching SerialSimulation")
+				expect.equal(eventOrder[1].instance, targetWall, "terminal hit was on the wrong wall")
+				expect.equal(eventOrder[2].name, "Pierced", "first Pierced event should follow Hit")
+				expect.equal(eventOrder[2].instance, firstWall, "first pierced wall was incorrect")
+				expect.equal(eventOrder[3].name, "Pierced", "second Pierced event should follow Hit")
+				expect.equal(eventOrder[3].instance, secondWall, "second pierced wall was incorrect")
 
 				connection:Disconnect()
 				caster:Destroy()
@@ -830,16 +830,20 @@ return function()
 				local secondCount = 0
 
 				local caster = createParallelCaster(nil, expect)
-				caster.Hit:Connect(function(_, result)
+				local hitSignal = caster.Hit
+				expect.equal(hitSignal:HasListeners(), false, "new Signal should have no listeners")
+
+				local firstConnection = hitSignal:Connect(function(_, result)
 					if result.Instance == wall then
 						firstCount += 1
 					end
 				end)
-				caster.Hit:Connect(function(_, result)
+				local secondConnection = hitSignal:Connect(function(_, result)
 					if result.Instance == wall then
 						secondCount += 1
 					end
 				end)
+				expect.equal(hitSignal:HasListeners(), true, "Signal should report connected listeners")
 
 				-- Allow the worker VMs to finish initialization and the wall to
 				-- enter spatial-query data before testing Signal delivery.
@@ -868,6 +872,11 @@ return function()
 						secondCount
 					)
 				)
+
+				firstConnection:Disconnect()
+				expect.equal(hitSignal:HasListeners(), true, "Signal should still have the second listener")
+				secondConnection:Disconnect()
+				expect.equal(hitSignal:HasListeners(), false, "Signal should report no listeners after disconnect")
 
 				caster:Destroy()
 				arena:Destroy()
