@@ -23,7 +23,8 @@ The functional suite is organized into two sections. Both exercise the **Paralle
 - [ ] Call `FastCast.DestroyVMs()`, verify firing requires reinitialization, then call `FastCast.Init()` and confirm an existing caster can fire again.
 - [ ] Fire Raycast, Blockcast, and Spherecast casts; confirm each reaches a target and terminates.
 - [ ] Verify enabled public event callbacks and multiple Signal listeners.
-- [ ] Verify event configuration can disable callback channels; for example, setting `UseLengthChanged = true` enables the `LengthChanged` callback.
+- [ ] Verify caster Signal listeners are tracked per caster and synchronized to every worker when connected, disconnected, or reconnected.
+- [ ] Verify worker module callbacks are detected by checking whether each event field is a function.
 - [ ] Check behavior defaults and independent nested configuration.
 - [ ] Verify `InitialOffset` initializes the cosmetic transform and that runtime `Offset` changes propagate through `SyncChangesToCast`.
 - [ ] Verify `MaxPiercesPerStep` emits pierced events before the terminal hit and respects the configured ray-attempt limit.
