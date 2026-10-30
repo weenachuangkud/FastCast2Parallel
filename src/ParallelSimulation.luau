@@ -125,13 +125,52 @@ local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
 local casts_HasCosmetic = {} :: { [number]: boolean }
 local castsWithCosmetics: number = 0
 
--- Packed metadata: f64 cast ID + u8 event type. Keep IDs lossless (no u32
--- wraparound); Roblox values stay in the reusable argument tables below.
--- Capacity doubles only at a new high-water mark, never during steady state.
-local EVENT_STRIDE = 9
-local eventCapacity = 256
-local eventMetadata = buffer.create(eventCapacity * EVENT_STRIDE)
-local queuedEventsCount: number = 0
+-- Each event type has its own double-buffered queue. Swapping buffers before
+-- dispatch preserves events queued by callbacks for the next drain of that type.
+type QueuedEventBuffer = {
+	metadata: buffer,
+	capacity: number,
+	count: number,
+	argsPool: { { any } }
+}
+
+type QueuedEventQueue = {
+	pending: QueuedEventBuffer,
+	dispatching: QueuedEventBuffer
+}
+
+local EVENT_STRIDE = 8
+local EVENT_CAPACITY = 256
+
+local function CreateQueuedEventBuffer(): QueuedEventBuffer
+	return {
+		metadata = buffer.create(EVENT_CAPACITY * EVENT_STRIDE),
+		capacity = EVENT_CAPACITY,
+		count = 0,
+		argsPool = {}
+	}
+end
+
+local function CreateQueuedEventQueue(): QueuedEventQueue
+	return {
+		pending = CreateQueuedEventBuffer(),
+		dispatching = CreateQueuedEventBuffer()
+	}
+end
+
+local queuedOnStep = CreateQueuedEventQueue()
+local queuedLengthChanged = CreateQueuedEventQueue()
+local queuedHit = CreateQueuedEventQueue()
+local queuedPierced = CreateQueuedEventQueue()
+local queuedCastTerminating = CreateQueuedEventQueue()
+
+local queuedEventsByType: { [number]: QueuedEventQueue } = {
+	[EVT_ON_STEP] = queuedOnStep,
+	[EVT_LENGTH_CHANGED] = queuedLengthChanged,
+	[EVT_HIT] = queuedHit,
+	[EVT_PIERCED] = queuedPierced,
+	[EVT_CAST_TERMINATING] = queuedCastTerminating
+}
 
 -- Flat visualization queue: { castID, data }
 -- Reused every frame via table.clear
@@ -331,17 +370,6 @@ local Visualizers = {
 -- Pre-allocated pools (reused every frame, never freed)
 -- ============================================================================
 
-local argsPool: { { any } } = {}
-local argsPoolCount: number = 0
-
-local function GetArgs(): { any }
-	argsPoolCount += 1
-	if argsPoolCount > #argsPool then
-		argsPool[argsPoolCount] = {}
-	end
-	return argsPool[argsPoolCount]
-end
-
 -- Pooled records for the worker -> main event batch.
 -- Layout: { eventType, cast, args, argCount }
 local batchPool: { { any } } = {}
@@ -393,7 +421,6 @@ local function GetSegVisData(): { any }
 end
 
 local function ResetPools()
-	argsPoolCount = 0
 	batchPoolCount = 0
 	visPoolCount = 0
 	hitVisPoolCount = 0
@@ -577,39 +604,62 @@ local function QueueEvent(
 		return
 	end
 
-	local args = GetArgs()
+	local eventQueue = queuedEventsByType[eventType]
+	if not eventQueue then
+		return
+	end
+
+	local queue = eventQueue.pending
+	queue.count += 1
+	local index = queue.count
+
+	if index > queue.capacity then
+		queue.capacity *= 2
+		local expanded = buffer.create(queue.capacity * EVENT_STRIDE)
+		buffer.copy(expanded, 0, queue.metadata)
+		queue.metadata = expanded
+	end
+
+	local args = queue.argsPool[index]
+	if not args then
+		args = {}
+		queue.argsPool[index] = args
+	end
+
 	args[1] = arg1
 	args[2] = arg2
 	args[3] = arg3
 	args[4] = arg4
 	args[5] = arg5
 
-	queuedEventsCount += 1
-	if queuedEventsCount > eventCapacity then
-		eventCapacity *= 2
-		local expanded = buffer.create(eventCapacity * EVENT_STRIDE)
-		buffer.copy(expanded, 0, eventMetadata)
-		eventMetadata = expanded
-	end
-	local offset = (queuedEventsCount - 1) * EVENT_STRIDE
-	buffer.writef64(eventMetadata, offset, castID)
-	buffer.writeu8(eventMetadata, offset + 8, eventType)
+	local offset = (index - 1) * EVENT_STRIDE
+	buffer.writef64(queue.metadata, offset, castID)
 end
 
-local function FireQueuedEvents()
-	-- Events are collected into a single per-frame batch so the worker only
-	-- crosses the Actor boundary once per frame instead of once per event.
-	local batch: { any } = {}
-	local batchCount = 0
+local function FireQueuedEvents(
+	eventType: number,
+	batch: { any },
+	batchCount: number
+): number
+	local eventQueue = queuedEventsByType[eventType]
+	if not eventQueue then
+		return batchCount
+	end
 
-	for i = 1, queuedEventsCount do
+	-- Swap before dispatch. Events queued by callbacks go into the pending
+	-- buffer and cannot overwrite the batch currently being processed.
+	local eventsToProcess = eventQueue.pending
+	eventQueue.pending = eventQueue.dispatching
+	eventQueue.dispatching = eventsToProcess
+	eventQueue.pending.count = 0
+
+	local eventCount = eventsToProcess.count
+	for i = 1, eventCount do
 		local offset = (i - 1) * EVENT_STRIDE
-		local castID = buffer.readf64(eventMetadata, offset)
-		local eventType = buffer.readu8(eventMetadata, offset + 8)
-		local args = argsPool[i]
+		local castID = buffer.readf64(eventsToProcess.metadata, offset)
+		local args = eventsToProcess.argsPool[i]
 
 		local cast = ActivesRef[castID]
-
 		if not cast then
 			continue
 		end
@@ -728,17 +778,15 @@ local function FireQueuedEvents()
 			if callback then
 				callback(cast)
 			end
-			
+
 			ActivesRef[castID] = nil
 			ParallelSimulation_Unregister(castID)
 		end
 	end
 
-	if batchCount > 0 then
-		BaseCastRef.Output:Fire(EVT_BATCH, batch)
-	end
+	eventsToProcess.count = 0
+	return batchCount
 end
-
 -- ============================================================================
 -- Movement
 -- ============================================================================
@@ -1809,11 +1857,23 @@ local function UpdateCasts(delta: number)
 	BulkMoveTo()
 
 	FireQueuedVisualizes()
-	FireQueuedEvents()
+
+	-- Keep event dispatch order consistent with SerialSimulation. The worker
+	-- still sends one batch to the main thread for all public event signals.
+	local batch: { any } = {}
+	local batchCount = 0
+	batchCount = FireQueuedEvents(EVT_ON_STEP, batch, batchCount)
+	batchCount = FireQueuedEvents(EVT_LENGTH_CHANGED, batch, batchCount)
+	batchCount = FireQueuedEvents(EVT_HIT, batch, batchCount)
+	batchCount = FireQueuedEvents(EVT_PIERCED, batch, batchCount)
+	batchCount = FireQueuedEvents(EVT_CAST_TERMINATING, batch, batchCount)
+
+	if batchCount > 0 then
+		BaseCastRef.Output:Fire(EVT_BATCH, batch)
+	end
 
 	-- Reset pool counters (reuse tables next frame)
 	ResetPools()
-	queuedEventsCount = 0
 	queuedVisCount = 0
 end
 
