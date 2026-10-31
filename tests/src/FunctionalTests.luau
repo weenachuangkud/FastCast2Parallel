@@ -1634,6 +1634,7 @@ return function()
 						-- must reach the worker before it performs its first cast.
 						FastCast.PauseCast(cast)
 						cast.StateInfo.MaxPiercesPerStep = 2
+						FastCast.SetVelocityCast(cast, Vector3.new(0, 0, -1200))
 						FastCast:SyncChangesToCast(cast)
 						FastCast.ResumeCast(cast)
 					end,
@@ -1641,7 +1642,7 @@ return function()
 				caster:SetFastCastEventsModule(TestEventsModule)
 				task.wait(0.25)
 
-				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 1200, behavior)
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 0, behavior)
 				expect.truthy(
 					Framework.waitFor(function()
 						return hitInstance ~= nil
@@ -1650,6 +1651,41 @@ return function()
 				)
 				expect.equal(hitInstance, targetWall, "updated pierce limit hit the wrong wall")
 				expect.equal(pierceCount, 1, "updated pierce limit did not report exactly one pierced wall")
+
+				connection:Disconnect()
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("parallel event batches preserve arguments for multiple casts", function(expect)
+				local arena = createArena(expect)
+				local firstWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local secondWall = createWall(arena, Vector3.new(100, 0, -12), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local firstBehavior = makeBehavior(container)
+				firstBehavior.UserData = { Tag = "first" }
+				local secondBehavior = makeBehavior(container)
+				secondBehavior.UserData = { Tag = "second" }
+
+				local received = {}
+				local caster = createParallelCaster(nil, expect)
+				local connection = caster.Hit:Connect(function(cast, result)
+					received[cast.UserData.Tag] = result.Instance
+				end)
+
+				-- Queue both requests back-to-back so their output records can share
+				-- the worker's pooled event batch.
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, firstBehavior)
+				fire(caster, "Raycast", Vector3.new(100, 0, 0), Vector3.new(0, 0, -1), 120, secondBehavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return received.first ~= nil and received.second ~= nil
+					end, HIT_TIMEOUT),
+					"both casts did not deliver Hit events"
+				)
+				expect.equal(received.first, firstWall, "first cast received another cast's event arguments")
+				expect.equal(received.second, secondWall, "second cast received another cast's event arguments")
 
 				connection:Disconnect()
 				caster:Destroy()
