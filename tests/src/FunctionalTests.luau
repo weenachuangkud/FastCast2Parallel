@@ -1643,8 +1643,29 @@ return function()
 					end,
 				}, expect)
 				local behavior = FastCast.newBehavior()
+				behavior.VisualizeCasts = true
+				behavior.VisualizeCastSettings.Debug_RayLifetime = 60
+				behavior.VisualizeCastSettings.Debug_HitLifetime = 60
+
+				-- Start from an empty folder so this test can prove the active cast
+				-- creates adornments that DestroyVMs must remove.
+				local visualizationFolder = workspace.Terrain:FindFirstChild("FastCastVisualizationObjects")
+				if visualizationFolder then
+					visualizationFolder:Destroy()
+				end
+
+				caster:RaycastFire(Vector3.zero, Vector3.yAxis, 60, behavior)
+				expect.truthy(Framework.waitFor(function()
+					local folder = workspace.Terrain:FindFirstChild("FastCastVisualizationObjects")
+					return folder ~= nil and #folder:GetChildren() > 0
+				end, HIT_TIMEOUT), "active cast did not create debug visualization adornments")
 
 				FastCast.DestroyVMs()
+				expect.equal(
+					workspace.Terrain:FindFirstChild("FastCastVisualizationObjects"),
+					nil,
+					"DestroyVMs did not remove debug visualization adornments"
+				)
 				expect.equal(caster.CasterId ~= nil, true, "DestroyVMs destroyed the caster object")
 
 				local ok = pcall(function()
