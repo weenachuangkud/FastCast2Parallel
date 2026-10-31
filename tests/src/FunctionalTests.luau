@@ -1692,6 +1692,45 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("Destroying a caster preserves cast data for CastTerminating listeners", function(expect)
+				local arena = createArena(expect)
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local firedCast = nil
+				local terminatingCast = nil
+
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						firedCast = cast
+						FastCast.PauseCast(cast)
+					end,
+					CastTerminating = function(cast)
+						terminatingCast = cast
+					end,
+				}, expect)
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 0, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return firedCast ~= nil
+					end, HIT_TIMEOUT),
+					"parallel CastFire never ran"
+				)
+
+				caster:Destroy()
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminatingCast ~= nil
+					end, HIT_TIMEOUT),
+					"Destroying the caster did not dispatch CastTerminating"
+				)
+				expect.equal(terminatingCast.ID, firedCast.ID, "CastTerminating received the wrong cast")
+				expect.truthy(terminatingCast.RayInfo ~= nil, "CastTerminating received a cleared cast table")
+				expect.truthy(terminatingCast.StateInfo ~= nil, "CastTerminating lost cast state before dispatch")
+
+				arena:Destroy()
+			end)
+
 			test("FastCast:SyncChangesToCast does not error", function(expect)
 				local arena = createArena(expect)
 				local container = createContainer(arena)
