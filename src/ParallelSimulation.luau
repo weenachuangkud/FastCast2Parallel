@@ -664,6 +664,7 @@ local function FireQueuedEvents(
 
 		local cast = ActivesRef[castID]
 		if not cast then
+			table.clear(args)
 			continue
 		end
 
@@ -681,7 +682,7 @@ local function FireQueuedEvents(
 				local record = GetBatchRecord()
 				record[1] = EVT_LENGTH_CHANGED
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 5
 				batch[batchCount] = record
 			end
@@ -707,7 +708,7 @@ local function FireQueuedEvents(
 				local record = GetBatchRecord()
 				record[1] = EVT_HIT
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 3
 				batch[batchCount] = record
 			end
@@ -731,7 +732,7 @@ local function FireQueuedEvents(
 				local record = GetBatchRecord()
 				record[1] = EVT_PIERCED
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 3
 				batch[batchCount] = record
 			end
@@ -754,7 +755,7 @@ local function FireQueuedEvents(
 				local record = GetBatchRecord()
 				record[1] = EVT_ON_STEP
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 1
 				batch[batchCount] = record
 			end
@@ -763,6 +764,7 @@ local function FireQueuedEvents(
 			local callback = args[1]
 
 			if cast._Destroying then
+				table.clear(args)
 				continue
 			end
 
@@ -785,11 +787,35 @@ local function FireQueuedEvents(
 			ActivesRef[castID] = nil
 			ParallelSimulation_Unregister(castID)
 		end
+
+		table.clear(args)
 	end
 
 	eventsToProcess.count = 0
 	return batchCount
 end
+
+-- BindableEvent listeners may run asynchronously. Snapshot pooled records
+-- before firing so the next simulation update cannot overwrite their fields.
+local function FireOutputBatch(batch: { any }, batchCount: number)
+	if batchCount == 0 then
+		return
+	end
+
+	local outputBatch = table.create(batchCount)
+	for i = 1, batchCount do
+		local record = batch[i]
+		outputBatch[i] = table.clone(record)
+
+		-- The record pool should not retain casts or argument tables after send.
+		record[2] = nil
+		record[3] = nil
+		record[4] = 0
+	end
+
+	BaseCastRef.Output:Fire(EVT_BATCH, outputBatch)
+end
+
 -- ============================================================================
 -- Movement
 -- ============================================================================
@@ -1860,9 +1886,7 @@ local function UpdateCasts(delta: number)
 
 	batchCount = FireQueuedEvents(EVT_ON_STEP, batch, batchCount)
 
-	if batchCount > 0 then
-		BaseCastRef.Output:Fire(EVT_BATCH, batch)
-	end
+	FireOutputBatch(batch, batchCount)
 
 	UpdateMotor6Ds()
 	BulkMoveTo()
@@ -1877,9 +1901,7 @@ local function UpdateCasts(delta: number)
 	batchCount = FireQueuedEvents(EVT_PIERCED, batch, batchCount)
 	batchCount = FireQueuedEvents(EVT_CAST_TERMINATING, batch, batchCount)
 
-	if batchCount > 0 then
-		BaseCastRef.Output:Fire(EVT_BATCH, batch)
-	end
+	FireOutputBatch(batch, batchCount)
 
 	ResetPools()
 	queuedVisCount = 0
