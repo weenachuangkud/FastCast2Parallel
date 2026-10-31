@@ -263,6 +263,43 @@ return function()
 			end)
 		end),
 
+		Framework.describe("FastCastSignal", function(test)
+			test("Once, Wait, and DisconnectAll behave as expected", function(expect)
+				local caster = createParallelCaster(nil, expect)
+				local signal = caster.Hit
+				local onceValue = nil
+				local waitValue = nil
+				local disconnectedCount = 0
+
+				signal:Once(function(value)
+					onceValue = value
+				end)
+				signal:Fire("first")
+				signal:Fire("second")
+				expect.equal(onceValue, "first", "Once listener fired more than once or missed the first value")
+
+				task.spawn(function()
+					waitValue = signal:Wait()
+				end)
+				task.wait()
+				signal:Fire("waited")
+				expect.truthy(
+					Framework.waitFor(function()
+						return waitValue ~= nil
+					end, HIT_TIMEOUT),
+					"Wait did not resume when the signal fired"
+				)
+				expect.equal(waitValue, "waited", "Wait returned the wrong value")
+
+				signal:Connect(function()
+					disconnectedCount += 1
+				end)
+				signal:DisconnectAll()
+				signal:Fire("after disconnect")
+				expect.equal(disconnectedCount, 0, "DisconnectAll left a listener connected")
+			end)
+		end),
+
 		Framework.describe("FastCast — Shared API coverage", function(test)
 			test("initializes shared runtime and creates casters", function(expect)
 				FastCast.Init(2, "BulkMoveTo")
@@ -416,7 +453,7 @@ return function()
 				expect.equal(cosmetic.CFrame, cast.CFrame, "initial cosmetic transform did not include Offset")
 
 				local previousPosition = cosmetic.Position
-				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -30))
+				FastCast.SetVelocityCast(cast, Vector3.new(0, 0, -30))
 				cast.Offset = CFrame.new(100, 0, 0)
 				FastCast:SyncChangesToCast(cast)
 
@@ -660,67 +697,76 @@ return function()
 				end, HIT_TIMEOUT), "parallel CastFire never ran")
 
 				local cast = firedCast :: any
-				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -100))
-				FastCast:AddVelocityCast(cast, Vector3.new(10, 0, 0))
-				FastCast:SetAccelerationCast(cast, Vector3.new(0, -10, 0))
-				FastCast:AddAccelerationCast(cast, Vector3.new(0, -5, 0))
-				FastCast:SetPositionCast(cast, Vector3.new(5, 5, 5))
-				FastCast:AddPositionCast(cast, Vector3.new(1, 0, 0))
+				FastCast.SetVelocityCast(cast, Vector3.new(0, 0, -100))
+				FastCast.AddVelocityCast(cast, Vector3.new(10, 0, 0))
+				FastCast.SetAccelerationCast(cast, Vector3.new(0, -10, 0))
+				FastCast.AddAccelerationCast(cast, Vector3.new(0, -5, 0))
+				FastCast.SetPositionCast(cast, Vector3.new(5, 5, 5))
+				FastCast.AddPositionCast(cast, Vector3.new(1, 0, 0))
 				FastCast:SyncChangesToCast(cast)
 
-				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(10, 0, -100), 1e-3, "velocity was not updated")
-				expect.near(FastCast:GetAccelerationCast(cast), Vector3.new(0, -15, 0), 1e-3, "acceleration was not updated")
-				expect.near(FastCast:GetPositionCast(cast), Vector3.new(6, 5, 5), 1e-3, "position was not updated")
+				expect.near(FastCast.GetVelocityCast(cast), Vector3.new(10, 0, -100), 1e-3, "velocity was not updated")
+				expect.near(FastCast.GetAccelerationCast(cast), Vector3.new(0, -15, 0), 1e-3, "acceleration was not updated")
+				expect.near(FastCast.GetPositionCast(cast), Vector3.new(6, 5, 5), 1e-3, "position was not updated")
 
-				FastCast:SetVelocity(cast, Vector3.new(1, 2, 3))
-				FastCast:SetAcceleration(cast, Vector3.new(4, 5, 6))
+				FastCast.SetVelocity(cast, Vector3.new(1, 2, 3))
+				FastCast.SetAcceleration(cast, Vector3.new(4, 5, 6))
 				FastCast:SyncChangesToCast(cast)
-				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(1, 2, 3), 1e-3, "SetVelocity alias did not update velocity")
-				expect.near(FastCast:GetAccelerationCast(cast), Vector3.new(4, 5, 6), 1e-3, "SetAcceleration alias did not update acceleration")
+				expect.near(FastCast.GetVelocityCast(cast), Vector3.new(1, 2, 3), 1e-3, "SetVelocity alias did not update velocity")
+				expect.near(FastCast.GetAccelerationCast(cast), Vector3.new(4, 5, 6), 1e-3, "SetAcceleration alias did not update acceleration")
 
-				FastCast:TerminateCast(cast)
+				FastCast.TerminateCast(cast)
 				caster:Destroy()
 				arena:Destroy()
 			end)
 
-			test("HighFidelity Always still resolves a hit", function(expect)
-				local arena = createArena(expect)
-				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
-				local container = createContainer(arena)
-				local behavior = makeBehavior(container)
-				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
-				behavior.HighFidelitySegmentSize = 1
+			test("HighFidelity modes all resolve hits", function(expect)
+				local modes = {
+					{ Name = "Default", Value = FastCastEnums.HighFidelityBehavior.Default, SegmentSize = 0.5 },
+					{ Name = "Automatic", Value = FastCastEnums.HighFidelityBehavior.Automatic, SegmentSize = 0.25 },
+					{ Name = "Always", Value = FastCastEnums.HighFidelityBehavior.Always, SegmentSize = 1 },
+				}
 
-				-- Roblox may not include newly-parented parts in spatial queries
-				-- immediately. Ensure the wall is queryable before the worker starts
-				-- advancing this fast cast, or it can pass through during that delay.
-				expect.truthy(
-					Framework.waitFor(function()
-						local result = workspace:Raycast(
-							Vector3.zero,
-							Vector3.new(0, 0, -20),
-							behavior.RaycastParams
-						)
-						return result ~= nil and result.Instance == wall
-					end, HIT_TIMEOUT),
-					"test wall never became queryable before the high-fidelity cast"
-				)
+				for _, mode in modes do
+					local arena = createArena(expect)
+					local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+					local container = createContainer(arena)
+					local behavior = makeBehavior(container)
+					behavior.HighFidelityBehavior = mode.Value
+					behavior.HighFidelitySegmentSize = mode.SegmentSize
+					behavior.MaxLifetime = 3
 
-				local hitInstance = nil
-				local caster = createParallelCaster({
-					Hit = function(_, result)
-						hitInstance = result.Instance
-					end,
-				}, expect)
+					expect.truthy(
+						Framework.waitFor(function()
+							local result = workspace:Raycast(
+								Vector3.zero,
+								Vector3.new(0, 0, -20),
+								behavior.RaycastParams
+							)
+							return result ~= nil and result.Instance == wall
+						end, HIT_TIMEOUT),
+						mode.Name .. " high-fidelity test wall was not queryable before firing"
+					)
 
-				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
-				expect.truthy(Framework.waitFor(function()
-					return hitInstance ~= nil
-				end, HIT_TIMEOUT), "high-fidelity cast never hit the wall")
-				expect.equal(hitInstance, wall, "high-fidelity cast hit the wrong instance")
+					local hitInstance = nil
+					local caster = createParallelCaster({
+						Hit = function(_, result)
+							hitInstance = result.Instance
+						end,
+					}, expect)
 
-				caster:Destroy()
-				arena:Destroy()
+					fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+					expect.truthy(
+						Framework.waitFor(function()
+							return hitInstance ~= nil
+						end, HIT_TIMEOUT),
+						mode.Name .. " high-fidelity cast never hit the wall"
+					)
+					expect.equal(hitInstance, wall, mode.Name .. " high-fidelity cast hit the wrong instance")
+
+					caster:Destroy()
+					arena:Destroy()
+				end
 			end)
 
 			test("HighFidelity Always terminates when MaxDistance is reached", function(expect)
@@ -883,6 +929,275 @@ return function()
 			end)
 
 
+			test("Active casts expose and update PreviousPosition", function(expect)
+				local arena = createArena(expect)
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxLifetime = 3
+
+				local origin = Vector3.new(0, 1000, 0)
+				local latestCast = nil
+				local previousPosition = nil
+				local caster = createParallelCaster({
+					OnStep = function(cast)
+						latestCast = cast
+						previousPosition = cast.PreviousPosition
+					end,
+				}, expect)
+
+				fire(caster, "Raycast", origin, Vector3.xAxis, 60, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return previousPosition ~= nil and previousPosition.X > origin.X
+					end, HIT_TIMEOUT),
+					"PreviousPosition did not advance with the simulated cast"
+				)
+
+				if latestCast then
+					FastCast.TerminateCast(latestCast)
+				end
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("CanPierce passes through a thick wall and hits the next wall", function(expect)
+				local arena = createArena(expect)
+				local thickWall = createWall(arena, Vector3.new(0, 0, -10), Vector3.new(50, 50, 20))
+				local finalWall = createWall(arena, Vector3.new(0, 0, -25), Vector3.new(50, 50, 1))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxPiercesPerStep = 2
+				behavior.MaxLifetime = 3
+				behavior.UserData = {
+					PierceAll = true,
+					TerminalWall = finalWall,
+				}
+
+				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
+				local receivedPierce = nil
+				local receivedHit = nil
+				local connection = signal.Event:Connect(function(name, _cast, result)
+					if typeof(result) ~= "RaycastResult" then
+						return
+					end
+
+					if name == "Pierced" then
+						receivedPierce = result.Instance
+					elseif name == "Hit" then
+						receivedHit = result.Instance
+					end
+				end)
+
+				local caster = createParallelCaster(nil, expect)
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.new(0, 0, 10),
+							Vector3.new(0, 0, -40),
+							behavior.RaycastParams
+						)
+						return result ~= nil and result.Instance == thickWall
+					end, HIT_TIMEOUT),
+					"thick-wall test geometry never became queryable"
+				)
+
+				fire(caster, "Raycast", Vector3.new(0, 0, 10), Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return receivedPierce ~= nil and receivedHit ~= nil
+					end, HIT_TIMEOUT),
+					"CanPierce did not pass through the thick wall and hit the next wall"
+				)
+				expect.equal(receivedPierce, thickWall, "CanPierce pierced the wrong instance")
+				expect.equal(receivedHit, finalWall, "cast did not hit the wall behind the thick wall")
+
+				connection:Disconnect()
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("LengthChanged runs when enabled", function(expect)
+				local arena = createArena(expect)
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local lengthChangedCount = 0
+				local cast = nil
+
+				local caster = createParallelCaster({
+					LengthChanged = function(activeCast)
+						lengthChangedCount += 1
+						cast = activeCast
+					end,
+				}, expect)
+
+				fire(caster, "Raycast", Vector3.new(0, 1000, 0), Vector3.xAxis, 60, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return lengthChangedCount > 0
+					end, HIT_TIMEOUT),
+					"LengthChanged never fired"
+				)
+
+				if cast then
+					FastCast.TerminateCast(cast)
+				end
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("terminating from OnStep preserves the queued termination event", function(expect)
+				local arena = createArena(expect)
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local stepCount = 0
+				local terminationCount = 0
+
+				local caster = createParallelCaster({
+					OnStep = function(cast)
+						stepCount += 1
+						FastCast.TerminateCast(cast)
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				}, expect)
+
+				fire(caster, "Raycast", Vector3.new(0, 1000, 0), Vector3.xAxis, 60, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminationCount > 0
+					end, HIT_TIMEOUT),
+					"termination queued by OnStep was lost"
+				)
+				task.wait(0.1)
+				expect.equal(stepCount, 1, "OnStep fired again after requesting termination")
+				expect.equal(terminationCount, 1, "CastTerminating fired more than once")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("terminating from LengthChanged preserves the queued termination event", function(expect)
+				local arena = createArena(expect)
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				local lengthChangedCount = 0
+				local terminationCount = 0
+
+				local caster = createParallelCaster({
+					LengthChanged = function(cast)
+						lengthChangedCount += 1
+						FastCast.TerminateCast(cast)
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				}, expect)
+
+				fire(caster, "Raycast", Vector3.new(0, 1000, 0), Vector3.xAxis, 60, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminationCount > 0
+					end, HIT_TIMEOUT),
+					"termination queued by LengthChanged was lost"
+				)
+				task.wait(0.1)
+				expect.greaterThan(lengthChangedCount, 0, "LengthChanged never fired")
+				expect.equal(terminationCount, 1, "CastTerminating fired more than once")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("terminating from Pierced preserves the queued termination event", function(expect)
+				local arena = createArena(expect)
+				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxDistance = 100
+				behavior.UserData = { PierceAll = true }
+
+				local piercedCount = 0
+				local terminationCount = 0
+				local caster = createParallelCaster({
+					Pierced = function(cast)
+						piercedCount += 1
+						FastCast.TerminateCast(cast)
+					end,
+					CastTerminating = function()
+						terminationCount += 1
+					end,
+				}, expect)
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						local result = workspace:Raycast(
+							Vector3.zero,
+							Vector3.new(0, 0, -20),
+							behavior.RaycastParams
+						)
+						return result ~= nil
+				end, HIT_TIMEOUT),
+					"pierce test wall never became queryable"
+				)
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return terminationCount > 0
+					end, HIT_TIMEOUT),
+					"termination queued by Pierced was lost"
+				)
+				task.wait(0.1)
+				expect.greaterThan(piercedCount, 0, "Pierced never fired")
+				expect.equal(terminationCount, 1, "CastTerminating fired more than once")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("OnStep changes trajectory for subsequent movement", function(expect)
+				local arena = createArena(expect)
+				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.UserData = {
+					OnStepVelocity = Vector3.new(0, 0, -120),
+				}
+
+				local hitInstance = nil
+				local caster = createParallelCaster({
+					Hit = function(_, result)
+						hitInstance = result.Instance
+					end,
+				}, expect)
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.yAxis, 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return hitInstance ~= nil
+					end, HIT_TIMEOUT),
+					"worker OnStep did not steer the cast into the wall"
+				)
+				expect.equal(hitInstance, wall, "OnStep steered the cast to the wrong instance")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 		end),
 
 		Framework.describe("FastCast — Parallel-specific coverage", function(test)
@@ -941,7 +1256,7 @@ return function()
 					elseif castType == "Spherecast" then
 						expect.equal(cast.RayInfo.Radius, 0.5, "Spherecast radius was not exposed")
 					end
-					FastCast:TerminateCast(cast)
+					FastCast.TerminateCast(cast)
 				end
 
 				caster:Destroy()
@@ -1043,11 +1358,15 @@ return function()
 				local firedCast = nil
 				local hitInstance = nil
 				local terminationCount = 0
+				local stepRuntime = nil
 
 				local caster = createParallelCaster({
+					OnStep = function(cast)
+						stepRuntime = cast.StateInfo.TotalRuntime
+					end,
 					CastFire = function(cast)
 						firedCast = cast
-						FastCast:PauseCast(cast)
+						FastCast.PauseCast(cast)
 					end,
 					Hit = function(_, result)
 						hitInstance = result.Instance
@@ -1065,11 +1384,13 @@ return function()
 					"CastFire did not provide an active cast"
 				)
 
+				local runtimeAtPause = firedCast.StateInfo.TotalRuntime
 				task.wait(0.25)
 				expect.equal(hitInstance, nil, "paused cast continued to hit")
 				expect.equal(terminationCount, 0, "paused cast terminated while paused")
+				expect.equal(firedCast.StateInfo.TotalRuntime, runtimeAtPause, "paused cast runtime advanced")
 
-				FastCast:ResumeCast(firedCast)
+				FastCast.ResumeCast(firedCast)
 				expect.truthy(
 					Framework.waitFor(function()
 						return hitInstance ~= nil
@@ -1128,12 +1449,12 @@ return function()
 				caster = createParallelCaster({
 					CastFire = function(cast)
 						-- Hold the cast until the updated UserData reaches the worker.
-						FastCast:PauseCast(cast)
+						FastCast.PauseCast(cast)
 						cast.UserData = {
 							OnStepVelocity = Vector3.new(0, 0, -120),
 						}
 						FastCast:SyncChangesToCast(cast)
-						FastCast:ResumeCast(cast)
+						FastCast.ResumeCast(cast)
 					end,
 					Hit = function(_, result)
 						hitInstance = result.Instance
@@ -1225,16 +1546,16 @@ return function()
 				local totalRuntime = cast.StateInfo.TotalRuntime
 				local distanceCovered = cast.StateInfo.DistanceCovered
 
-				FastCast:SetVelocityCast(cast, Vector3.new(0, 0, -100))
+				FastCast.SetVelocityCast(cast, Vector3.new(0, 0, -100))
 				FastCast:SyncChangesToCast(cast)
 				task.wait(0.1)
 
 				expect.equal(cast.StateInfo.Trajectory, trajectory, "trajectory table reference changed")
 				expect.equal(cast.StateInfo.TotalRuntime, totalRuntime, "sync overwrote worker-owned runtime")
 				expect.equal(cast.StateInfo.DistanceCovered, distanceCovered, "sync overwrote worker-owned distance")
-				expect.near(FastCast:GetVelocityCast(cast), Vector3.new(0, 0, -100), 1e-3, "trajectory change was not applied")
+				expect.near(FastCast.GetVelocityCast(cast), Vector3.new(0, 0, -100), 1e-3, "trajectory change was not applied")
 
-				FastCast:TerminateCast(cast)
+				FastCast.TerminateCast(cast)
 				caster:Destroy()
 				arena:Destroy()
 			end)
@@ -1249,7 +1570,7 @@ return function()
 				local caster = createParallelCaster({
 					CastFire = function(cast)
 						firedCast = cast
-						FastCast:PauseCast(cast)
+						FastCast.PauseCast(cast)
 					end,
 					CastTerminating = function()
 						terminationCount += 1
@@ -1267,7 +1588,7 @@ return function()
 				local cast = firedCast :: any
 				cast.RayInfo.MaxDistance = 1
 				FastCast:SyncChangesToCast(cast)
-				FastCast:ResumeCast(cast)
+				FastCast.ResumeCast(cast)
 
 				expect.truthy(
 					Framework.waitFor(function()
@@ -1301,13 +1622,13 @@ return function()
 				)
 
 				local cast = firedCast :: any
-				FastCast:SetPositionCast(cast, Vector3.new(10, 10, 10))
+				FastCast.SetPositionCast(cast, Vector3.new(10, 10, 10))
 				FastCast:SyncChangesToCast(cast)
 				task.wait(0.1)
 
-				expect.near(FastCast:GetPositionCast(cast), Vector3.new(10, 10, 10), 1e-3, "sync changed the local cast")
+				expect.near(FastCast.GetPositionCast(cast), Vector3.new(10, 10, 10), 1e-3, "sync changed the local cast")
 
-				FastCast:TerminateCast(cast)
+				FastCast.TerminateCast(cast)
 				caster:Destroy()
 				arena:Destroy()
 			end)
