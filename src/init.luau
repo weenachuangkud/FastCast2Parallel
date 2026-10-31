@@ -144,7 +144,8 @@ local OUTPUT_EVENT_NAMES = {
 	[EVENT_TYPE_HIT] = "Hit",
 	[EVENT_TYPE_PIERCED] = "Pierced",
 	[EVENT_TYPE_CAST_TERMINATING] = "CastTerminating",
-	[EVENT_TYPE_ON_STEP] = "OnStep"
+	[EVENT_TYPE_ON_STEP] = "OnStep",
+	[EVENT_TYPE_CAST_FIRE] = "CastFire"
 }
 
 --[[
