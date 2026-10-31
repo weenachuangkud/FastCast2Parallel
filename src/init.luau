@@ -111,26 +111,24 @@ type vaildcast = TypeDef.ActiveCastData | TypeDef.ActiveBlockcastData | TypeDef.
 local DEFAULT_CACHE_SIZE = 500
 local DEFAULT_CACHE_HOLDER = workspace
 
-local EventType = {
-	LengthChanged = 1,
-	Hit = 2,
-	Pierced = 3,
-	CastTerminating = 4,
-	OnStep = 5,
-	CastFire = 6,
-	Batch = 7,
-	CasterDestroyed = 8
-}
+local EVENT_TYPE_LENGTH_CHANGED = 1
+local EVENT_TYPE_HIT = 2
+local EVENT_TYPE_PIERCED = 3
+local EVENT_TYPE_CAST_TERMINATING = 4
+local EVENT_TYPE_ON_STEP = 5
+local EVENT_TYPE_CAST_FIRE = 6
+local EVENT_TYPE_BATCH = 7
+local EVENT_TYPE_CASTER_DESTROYED = 8
 
 -- Events exposed on a Caster as a Signal. Assigning a function to one of these
 -- names is equivalent to connecting that function to the underlying Signal.
 local SIGNAL_EVENT_TYPES = {
-	CastFire = EventType.CastFire,
-	OnStep = EventType.OnStep,
-	CastTerminating = EventType.CastTerminating,
-	Hit = EventType.Hit,
-	Pierced = EventType.Pierced,
-	LengthChanged = EventType.LengthChanged
+	CastFire = EVENT_TYPE_CAST_FIRE,
+	OnStep = EVENT_TYPE_ON_STEP,
+	CastTerminating = EVENT_TYPE_CAST_TERMINATING,
+	Hit = EVENT_TYPE_HIT,
+	Pierced = EVENT_TYPE_PIERCED,
+	LengthChanged = EVENT_TYPE_LENGTH_CHANGED
 }
 
 -- CanPierce is a query (it has to return a boolean), so it stays a plain function.
@@ -142,11 +140,11 @@ local QUERY_EVENTS = {
 -- send one "Batch" message per frame containing records tagged with these IDs;
 -- the main thread demuxes them back into the Caster's signals.
 local OUTPUT_EVENT_NAMES = {
-	[EventType.LengthChanged] = "LengthChanged",
-	[EventType.Hit] = "Hit",
-	[EventType.Pierced] = "Pierced",
-	[EventType.CastTerminating] = "CastTerminating",
-	[EventType.OnStep] = "OnStep"
+	[EVENT_TYPE_LENGTH_CHANGED] = "LengthChanged",
+	[EVENT_TYPE_HIT] = "Hit",
+	[EVENT_TYPE_PIERCED] = "Pierced",
+	[EVENT_TYPE_CAST_TERMINATING] = "CastTerminating",
+	[EVENT_TYPE_ON_STEP] = "OnStep"
 }
 
 --[[
@@ -501,12 +499,12 @@ function FastCast.new()
 		CasterId = NextCasterId,
 		_events = NewCasterSignals(),
 		_eventFlags = {
-		[EventType.CastFire] = false,
-		[EventType.OnStep] = false,
-		[EventType.CastTerminating] = false,
-		[EventType.Hit] = false,
-		[EventType.Pierced] = false,
-		[EventType.LengthChanged] = false,
+		[EVENT_TYPE_CAST_FIRE] = false,
+		[EVENT_TYPE_ON_STEP] = false,
+		[EVENT_TYPE_CAST_TERMINATING] = false,
+		[EVENT_TYPE_HIT] = false,
+		[EVENT_TYPE_PIERCED] = false,
+		[EVENT_TYPE_LENGTH_CHANGED] = false,
 		},
 		WorldRoot = workspace,
 		FastCastEventsModule = DefaultFastCastEventsModule,
@@ -665,12 +663,12 @@ function FastCast.Init(
 	}
 
 	ParallelDispatcher = newDispatcher.new(numWorkers, data, function(eventType: number, ...)
-		if eventType == EventType.Batch then
+		if eventType == EVENT_TYPE_BATCH then
 			DispatchOutputBatch(...)
 			return
 		end
 
-		if eventType == EventType.CasterDestroyed then
+		if eventType == EVENT_TYPE_CASTER_DESTROYED then
 			HandleCasterDestroyed(...)
 			return
 		end
@@ -1234,8 +1232,8 @@ function FastCast.TerminateCast(cast: vaildcast)
 	cast._Destroying = true
 
 	local publicCaster = CasterRegistry[cast.CasterId]
-	if publicCaster and publicCaster._eventFlags[EventType.CastTerminating] then
-		caster.Output:Fire(EventType.CastTerminating, cast)
+	if publicCaster and publicCaster._eventFlags[EVENT_TYPE_CAST_TERMINATING] then
+		caster.Output:Fire(EVENT_TYPE_CAST_TERMINATING, cast)
 	end
 
 	caster.Actor:SendMessage("Cleanup", cast.ID)
