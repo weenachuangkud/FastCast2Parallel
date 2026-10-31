@@ -1605,6 +1605,57 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("FastCast:SyncChangesToCast updates MaxPiercesPerStep", function(expect)
+				local arena = createArena(expect)
+				local firstWall = createWall(arena, Vector3.new(0, 0, -5), Vector3.new(50, 50, 2))
+				local targetWall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+				behavior.MaxPiercesPerStep = 1
+				behavior.UserData = {
+					PierceAll = true,
+					TerminalWall = targetWall,
+				}
+
+				local hitInstance = nil
+				local pierceCount = 0
+				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
+				local connection = signal.Event:Connect(function(name, _cast, result)
+					if name == "Pierced" and typeof(result) == "RaycastResult" then
+						pierceCount += 1
+					elseif name == "Hit" and typeof(result) == "RaycastResult" then
+						hitInstance = result.Instance
+					end
+				end)
+
+				local caster = createParallelCaster({
+					CastFire = function(cast)
+						-- Pause before the first simulation step so the updated limit
+						-- must reach the worker before it performs its first cast.
+						FastCast.PauseCast(cast)
+						cast.StateInfo.MaxPiercesPerStep = 2
+						FastCast:SyncChangesToCast(cast)
+						FastCast.ResumeCast(cast)
+					end,
+				}, expect)
+				caster:SetFastCastEventsModule(TestEventsModule)
+				task.wait(0.25)
+
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 1200, behavior)
+				expect.truthy(
+					Framework.waitFor(function()
+						return hitInstance ~= nil
+					end, HIT_TIMEOUT),
+					"worker did not apply the updated MaxPiercesPerStep"
+				)
+				expect.equal(hitInstance, targetWall, "updated pierce limit hit the wrong wall")
+				expect.equal(pierceCount, 1, "updated pierce limit did not report exactly one pierced wall")
+
+				connection:Disconnect()
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("FastCast:SyncChangesToCast does not error", function(expect)
 				local arena = createArena(expect)
 				local container = createContainer(arena)
