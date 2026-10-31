@@ -1846,26 +1846,25 @@ local function UpdateCasts(delta: number)
 		end
 	end
 
-	-- =========================================================================
-	-- Synchronize back to the serial scheduler.
-	-- =========================================================================
-
 	task.synchronize()
 
-	-- =========================================================================
-	-- Main-thread-only work.
-	-- =========================================================================
+	local batch: { any } = {}
+	local batchCount = 0
+
+	batchCount = FireQueuedEvents(EVT_ON_STEP, batch, batchCount)
+
+	if batchCount > 0 then
+		BaseCastRef.Output:Fire(EVT_BATCH, batch)
+	end
 
 	UpdateMotor6Ds()
 	BulkMoveTo()
 
 	FireQueuedVisualizes()
 
-	-- Keep event dispatch order consistent with SerialSimulation. The worker
-	-- still sends one batch to the main thread for all public event signals.
-	local batch: { any } = {}
-	local batchCount = 0
-	batchCount = FireQueuedEvents(EVT_ON_STEP, batch, batchCount)
+	batch = {}
+	batchCount = 0
+
 	batchCount = FireQueuedEvents(EVT_LENGTH_CHANGED, batch, batchCount)
 	batchCount = FireQueuedEvents(EVT_HIT, batch, batchCount)
 	batchCount = FireQueuedEvents(EVT_PIERCED, batch, batchCount)
@@ -1875,7 +1874,6 @@ local function UpdateCasts(delta: number)
 		BaseCastRef.Output:Fire(EVT_BATCH, batch)
 	end
 
-	-- Reset pool counters (reuse tables next frame)
 	ResetPools()
 	queuedVisCount = 0
 end
