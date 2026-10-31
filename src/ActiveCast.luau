@@ -5,11 +5,12 @@
 
 local FastCastModule = script.Parent
 local TypeDef = require(FastCastModule:WaitForChild("TypeDefinitions"))
-local FastCastEnums = require(FastCastModule:WaitForChild("FastCastEnums"))
 
 local DEFAULT_MAX_DISTANCE = 1000
 
-local EnumCastTypes = FastCastEnums.CastType
+local CAST_TYPE_RAYCAST = 1
+local CAST_TYPE_BLOCKCAST = 2
+local CAST_TYPE_SPHERECAST = 3
 
 type CastVariant = { CastType: number, Size: Vector3?, Radius: number? }
 
@@ -20,9 +21,9 @@ type CastVariants = RaycastVariant | BlockcastVariant | SpherecastVariant
 
 
 --[[local CastVariantTypes = {
-	[EnumCastTypes.Raycast] = "Raycast",
-	[EnumCastTypes.Blockcast] = "Blockcast",
-	[EnumCastTypes.Spherecast] = "Spherecast"
+	[CAST_TYPE_RAYCAST] = "Raycast",
+	[CAST_TYPE_BLOCKCAST] = "Blockcast",
+	[CAST_TYPE_SPHERECAST] = "Spherecast"
 }]]
 
 local ActiveCast = {}
@@ -68,14 +69,6 @@ function ActiveCast.createCastData(
 				Acceleration = behavior.Acceleration,
 			},
 
-			FastCastEventsConfig = {
-				UseLengthChanged = behavior.FastCastEventsConfig.UseLengthChanged,
-				UseHit = behavior.FastCastEventsConfig.UseHit,
-				UsePierced = behavior.FastCastEventsConfig.UsePierced,
-				UseCastTerminating = behavior.FastCastEventsConfig.UseCastTerminating,
-				UseCanPierce = behavior.FastCastEventsConfig.UseCanPierce
-			},
-
 			VisualizeCasts = behavior.VisualizeCasts,
 			VisualizeCastSettings = behavior.VisualizeCastSettings,
 		},
@@ -98,20 +91,9 @@ function ActiveCast.createCastData(
 		Offset = behavior.InitialOffset or CFrame.identity,
 	}
 
-	if _parallel then
-		cast.StateInfo.FastCastEventsModuleConfig = {
-			UseLengthChanged = behavior.FastCastEventsModuleConfig.UseLengthChanged,
-			UseHit = behavior.FastCastEventsModuleConfig.UseHit,
-			UsePierced = behavior.FastCastEventsModuleConfig.UsePierced,
-			UseCastTerminating = behavior.FastCastEventsModuleConfig.UseCastTerminating,
-			UseCanPierce = behavior.FastCastEventsModuleConfig.UseCanPierce,
-			UseOnStep = behavior.FastCastEventsModuleConfig.UseOnStep,
-		}
-	end
-
-	if variant.CastType == EnumCastTypes.Blockcast then
+	if variant.CastType == CAST_TYPE_BLOCKCAST then
 		cast.RayInfo.Size = (variant :: BlockcastVariant).Size
-	elseif variant.CastType == EnumCastTypes.Spherecast then
+	elseif variant.CastType == CAST_TYPE_SPHERECAST then
 		cast.RayInfo.Radius = (variant :: SpherecastVariant).Radius
 	end
 

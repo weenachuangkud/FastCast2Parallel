@@ -11,11 +11,16 @@ local RS = game:GetService("RunService")
 local FastCastModule = script.Parent
 
 local TypeDef = require(FastCastModule:WaitForChild("TypeDefinitions"))
-local FastCastEnums = require(FastCastModule:WaitForChild("FastCastEnums"))
 local Config = require(FastCastModule:WaitForChild("Config"))
 
 local DebugLogging = Config.DebugLogging
-local EnumCastTypes = FastCastEnums.CastType
+
+local CAST_TYPE_RAYCAST = 1
+local CAST_TYPE_BLOCKCAST = 2
+local CAST_TYPE_SPHERECAST = 3
+
+local HIGH_FIDELITY_BEHAVIOR_AUTOMATIC = 2
+local HIGH_FIDELITY_BEHAVIOR_ALWAYS = 3
 
 local DEFAULT_MAX_DISTANCE = 1000
 local FC_VIS_OBJ_NAME = "FastCastVisualizationObjects"
@@ -53,12 +58,13 @@ type CastVisualizerVariants =
 	| BlockVisualizerVariant
 	| SphereVisualizerVariant
 
--- Event type constants (numeric IDs avoid string comparison in hot path)
+-- Event type constants (numeric IDs avoid string comparisons in the hot path).
 local EVT_LENGTH_CHANGED = 1
 local EVT_HIT = 2
 local EVT_PIERCED = 3
 local EVT_CAST_TERMINATING = 4
 local EVT_ON_STEP = 5
+local EVT_BATCH = 7
 
 --[[
 	Shoutout to DrSinek for some code
@@ -94,10 +100,8 @@ local casts_IsActivelyResimulating = {} :: { [number]: boolean }
 local casts_CancelHighResCast = {} :: { [number]: boolean }
 
 local casts_Trajectory = {} :: { [number]: TypeDef.CastTrajectory }
-
-local casts_FastCastEventsModuleConfig = {} :: { [number]: TypeDef.FastCastEventsModuleConfig }
-
-local casts_FastCastEventsConfig = {} :: { [number]: TypeDef.FastCastEventsConfig }
+local casts_CasterId = {} :: { [number]: number }
+local CasterEventFlags = {} :: { [number]: { [number]: boolean } }
 
 local casts_VisualizeCasts = {} :: { [number]: boolean }
 local casts_VisualizeCastSettings = {} :: { [number]: TypeDef.VisualizeCastSettings }
@@ -126,13 +130,52 @@ local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
 local casts_HasCosmetic = {} :: { [number]: boolean }
 local castsWithCosmetics: number = 0
 
--- Packed metadata: f64 cast ID + u8 event type. Keep IDs lossless (no u32
--- wraparound); Roblox values stay in the reusable argument tables below.
--- Capacity doubles only at a new high-water mark, never during steady state.
-local EVENT_STRIDE = 9
-local eventCapacity = 256
-local eventMetadata = buffer.create(eventCapacity * EVENT_STRIDE)
-local queuedEventsCount: number = 0
+-- Each event type has its own double-buffered queue. Swapping buffers before
+-- dispatch preserves events queued by callbacks for the next drain of that type.
+type QueuedEventBuffer = {
+	metadata: buffer,
+	capacity: number,
+	count: number,
+	argsPool: { { any } }
+}
+
+type QueuedEventQueue = {
+	pending: QueuedEventBuffer,
+	dispatching: QueuedEventBuffer
+}
+
+local EVENT_STRIDE = 8
+local EVENT_CAPACITY = 256
+
+local function CreateQueuedEventBuffer(): QueuedEventBuffer
+	return {
+		metadata = buffer.create(EVENT_CAPACITY * EVENT_STRIDE),
+		capacity = EVENT_CAPACITY,
+		count = 0,
+		argsPool = {}
+	}
+end
+
+local function CreateQueuedEventQueue(): QueuedEventQueue
+	return {
+		pending = CreateQueuedEventBuffer(),
+		dispatching = CreateQueuedEventBuffer()
+	}
+end
+
+local queuedOnStep = CreateQueuedEventQueue()
+local queuedLengthChanged = CreateQueuedEventQueue()
+local queuedHit = CreateQueuedEventQueue()
+local queuedPierced = CreateQueuedEventQueue()
+local queuedCastTerminating = CreateQueuedEventQueue()
+
+local queuedEventsByType: { [number]: QueuedEventQueue } = {
+	[EVT_ON_STEP] = queuedOnStep,
+	[EVT_LENGTH_CHANGED] = queuedLengthChanged,
+	[EVT_HIT] = queuedHit,
+	[EVT_PIERCED] = queuedPierced,
+	[EVT_CAST_TERMINATING] = queuedCastTerminating
+}
 
 -- Flat visualization queue: { castID, data }
 -- Reused every frame via table.clear
@@ -173,7 +216,7 @@ end
 -- ============================================================================
 
 local castHandlers = {
-	[EnumCastTypes.Raycast] = function(
+	[CAST_TYPE_RAYCAST] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -182,7 +225,7 @@ local castHandlers = {
 		return worldRoot:Raycast(origin, direction, params)
 	end,
 
-	[EnumCastTypes.Blockcast] = function(
+	[CAST_TYPE_BLOCKCAST] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -197,7 +240,7 @@ local castHandlers = {
 		)
 	end,
 
-	[EnumCastTypes.Spherecast] = function(
+	[CAST_TYPE_SPHERECAST] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -323,25 +366,14 @@ local function DbgVisualizeHit(
 end
 
 local Visualizers = {
-	[EnumCastTypes.Raycast] = DbgVisualizeRaySegment,
-	[EnumCastTypes.Blockcast] = DbgVisualizeBlockSegment,
-	[EnumCastTypes.Spherecast] = DbgVisualizeSphereSegment
+	[CAST_TYPE_RAYCAST] = DbgVisualizeRaySegment,
+	[CAST_TYPE_BLOCKCAST] = DbgVisualizeBlockSegment,
+	[CAST_TYPE_SPHERECAST] = DbgVisualizeSphereSegment
 }
 
 -- ============================================================================
 -- Pre-allocated pools (reused every frame, never freed)
 -- ============================================================================
-
-local argsPool: { { any } } = {}
-local argsPoolCount: number = 0
-
-local function GetArgs(): { any }
-	argsPoolCount += 1
-	if argsPoolCount > #argsPool then
-		argsPool[argsPoolCount] = {}
-	end
-	return argsPool[argsPoolCount]
-end
 
 -- Pooled records for the worker -> main event batch.
 -- Layout: { eventType, cast, args, argCount }
@@ -394,7 +426,6 @@ local function GetSegVisData(): { any }
 end
 
 local function ResetPools()
-	argsPoolCount = 0
 	batchPoolCount = 0
 	visPoolCount = 0
 	hitVisPoolCount = 0
@@ -511,9 +542,9 @@ local function FireQueuedVisualizes()
 		end
 
 		-- Reuse single variant table (consumed synchronously)
-		if castType == EnumCastTypes.Raycast then
+		if castType == CAST_TYPE_RAYCAST then
 			reusableVariant.castLength = casts_RayDisplacement[castID] or 1
-		elseif castType == EnumCastTypes.Blockcast then
+		elseif castType == CAST_TYPE_BLOCKCAST then
 			reusableVariant.size = (casts_CastVariant[castID] :: BlockcastVariant).Size
 		else
 			reusableVariant.radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
@@ -534,6 +565,37 @@ end
 -- Event signatures have at most five payload values. Assign all slots so
 -- nil holes cannot leave stale references behind (the # operator is undefined
 -- for sparse arrays), and avoid select/vararg loops in the hot path.
+local function HasCasterEvent(casterId: number, eventType: number): boolean
+	local eventFlags = CasterEventFlags[casterId]
+	return eventFlags ~= nil and eventFlags[eventType] == true
+end
+
+local function HasCasterEventForCast(castID: number, eventType: number): boolean
+	local casterId = casts_CasterId[castID]
+	return casterId ~= nil and HasCasterEvent(casterId, eventType)
+end
+
+local MODULE_EVENT_NAMES = {
+	[EVT_LENGTH_CHANGED] = "LengthChanged",
+	[EVT_HIT] = "Hit",
+	[EVT_PIERCED] = "Pierced",
+}
+
+local function ShouldQueueEvent(castID: number, eventType: number): boolean
+	-- Terminating events also perform cast cleanup, so they must always be queued.
+	if eventType == EVT_CAST_TERMINATING then
+		return true
+	end
+
+	if HasCasterEventForCast(castID, eventType) then
+		return true
+	end
+
+	local moduleEventName = MODULE_EVENT_NAMES[eventType]
+	local events = moduleEventName and casts_FastCastEvents[castID]
+	return events ~= nil and type(events[moduleEventName]) == "function"
+end
+
 local function QueueEvent(
 	castID: number,
 	eventType: number,
@@ -543,45 +605,71 @@ local function QueueEvent(
 	arg4: any,
 	arg5: any
 )
-	local args = GetArgs()
+	if not ShouldQueueEvent(castID, eventType) then
+		return
+	end
+
+	local eventQueue = queuedEventsByType[eventType]
+	if not eventQueue then
+		return
+	end
+
+	local queue = eventQueue.pending
+	queue.count += 1
+	local index = queue.count
+
+	if index > queue.capacity then
+		queue.capacity *= 2
+		local expanded = buffer.create(queue.capacity * EVENT_STRIDE)
+		buffer.copy(expanded, 0, queue.metadata)
+		queue.metadata = expanded
+	end
+
+	local args = queue.argsPool[index]
+	if not args then
+		args = {}
+		queue.argsPool[index] = args
+	end
+
 	args[1] = arg1
 	args[2] = arg2
 	args[3] = arg3
 	args[4] = arg4
 	args[5] = arg5
 
-	queuedEventsCount += 1
-	if queuedEventsCount > eventCapacity then
-		eventCapacity *= 2
-		local expanded = buffer.create(eventCapacity * EVENT_STRIDE)
-		buffer.copy(expanded, 0, eventMetadata)
-		eventMetadata = expanded
-	end
-	local offset = (queuedEventsCount - 1) * EVENT_STRIDE
-	buffer.writef64(eventMetadata, offset, castID)
-	buffer.writeu8(eventMetadata, offset + 8, eventType)
+	local offset = (index - 1) * EVENT_STRIDE
+	buffer.writef64(queue.metadata, offset, castID)
 end
 
-local function FireQueuedEvents()
-	-- Events are collected into a single per-frame batch so the worker only
-	-- crosses the Actor boundary once per frame instead of once per event.
-	local batch: { any } = {}
-	local batchCount = 0
+local function FireQueuedEvents(
+	eventType: number,
+	batch: { any },
+	batchCount: number
+): number
+	local eventQueue = queuedEventsByType[eventType]
+	if not eventQueue then
+		return batchCount
+	end
 
-	for i = 1, queuedEventsCount do
+	-- Swap before dispatch. Events queued by callbacks go into the pending
+	-- buffer and cannot overwrite the batch currently being processed.
+	local eventsToProcess = eventQueue.pending
+	eventQueue.pending = eventQueue.dispatching
+	eventQueue.dispatching = eventsToProcess
+	eventQueue.pending.count = 0
+
+	local eventCount = eventsToProcess.count
+	for i = 1, eventCount do
 		local offset = (i - 1) * EVENT_STRIDE
-		local castID = buffer.readf64(eventMetadata, offset)
-		local eventType = buffer.readu8(eventMetadata, offset + 8)
-		local args = argsPool[i]
+		local castID = buffer.readf64(eventsToProcess.metadata, offset)
+		local args = eventsToProcess.argsPool[i]
 
 		local cast = ActivesRef[castID]
-
 		if not cast then
+			table.clear(args)
 			continue
 		end
 
-		local moduleConfig = casts_FastCastEventsModuleConfig[castID]
-		local eventConfig = casts_FastCastEventsConfig[castID]
 		local fastCastEvents = casts_FastCastEvents[castID]
 
 		if eventType == EVT_LENGTH_CHANGED then
@@ -591,21 +679,17 @@ local function FireQueuedEvents()
 			local velocity = args[4]
 			local cosmetic = args[5]
 
-			if eventConfig and eventConfig.UseLengthChanged then
+			if HasCasterEventForCast(castID, EVT_LENGTH_CHANGED) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_LENGTH_CHANGED
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 5
 				batch[batchCount] = record
 			end
 
-			if moduleConfig
-				and moduleConfig.UseLengthChanged
-				and fastCastEvents
-				and fastCastEvents.LengthChanged
-			then
+			if fastCastEvents and type(fastCastEvents.LengthChanged) == "function" then
 				fastCastEvents.LengthChanged(
 					cast,
 					lastPoint,
@@ -621,21 +705,17 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if eventConfig and eventConfig.UseHit then
+			if HasCasterEventForCast(castID, EVT_HIT) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_HIT
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 3
 				batch[batchCount] = record
 			end
 
-			if moduleConfig
-				and moduleConfig.UseHit
-				and fastCastEvents
-				and fastCastEvents.Hit
-			then
+			if fastCastEvents and type(fastCastEvents.Hit) == "function" then
 				fastCastEvents.Hit(
 					cast,
 					result,
@@ -649,21 +729,17 @@ local function FireQueuedEvents()
 			local velocity = args[2]
 			local cosmetic = args[3]
 
-			if eventConfig and eventConfig.UsePierced then
+			if HasCasterEventForCast(castID, EVT_PIERCED) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_PIERCED
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 3
 				batch[batchCount] = record
 			end
 
-			if moduleConfig
-				and moduleConfig.UsePierced
-				and fastCastEvents
-				and fastCastEvents.Pierced
-			then
+			if fastCastEvents and type(fastCastEvents.Pierced) == "function" then
 				fastCastEvents.Pierced(
 					cast,
 					result,
@@ -676,12 +752,12 @@ local function FireQueuedEvents()
 			-- Public/main-thread OnStep notifications are dispatched after the
 			-- movement batch. Worker-module OnStep runs synchronously before
 			-- movement in UpdateCasts so it can steer the current simulation step.
-			if eventConfig and eventConfig.UseOnStep then
+			if HasCasterEventForCast(castID, EVT_ON_STEP) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_ON_STEP
 				record[2] = cast
-				record[3] = args
+				record[3] = table.clone(args)
 				record[4] = 1
 				batch[batchCount] = record
 			end
@@ -690,14 +766,13 @@ local function FireQueuedEvents()
 			local callback = args[1]
 
 			if cast._Destroying then
+				table.clear(args)
 				continue
 			end
 
 			cast._Destroying = true
 
-			if eventConfig
-				and eventConfig.UseCastTerminating
-			then
+			if HasCasterEventForCast(castID, EVT_CAST_TERMINATING) then
 				batchCount += 1
 				local record = GetBatchRecord()
 				record[1] = EVT_CAST_TERMINATING
@@ -710,15 +785,37 @@ local function FireQueuedEvents()
 			if callback then
 				callback(cast)
 			end
-			
+
 			ActivesRef[castID] = nil
 			ParallelSimulation_Unregister(castID)
 		end
+
+		table.clear(args)
 	end
 
-	if batchCount > 0 then
-		BaseCastRef.Output:Fire("Batch", batch)
+	eventsToProcess.count = 0
+	return batchCount
+end
+
+-- BindableEvent listeners may run asynchronously. Snapshot pooled records
+-- before firing so the next simulation update cannot overwrite their fields.
+local function FireOutputBatch(batch: { any }, batchCount: number)
+	if batchCount == 0 then
+		return
 	end
+
+	local outputBatch = table.create(batchCount)
+	for i = 1, batchCount do
+		local record = batch[i]
+		outputBatch[i] = table.clone(record)
+
+		-- The record pool should not retain casts or argument tables after send.
+		record[2] = nil
+		record[3] = nil
+		record[4] = 0
+	end
+
+	BaseCastRef.Output:Fire(EVT_BATCH, outputBatch)
 end
 
 -- ============================================================================
@@ -833,22 +930,13 @@ end
 -- ============================================================================
 
 local function GetEventCallbacks(id: number)
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
 	local events = casts_FastCastEvents[id]
-
-	if not moduleConfig or not events then
+	if not events then
 		return nil, nil
 	end
 
-	local canPierce =
-		moduleConfig.UseCanPierce
-		and events.CanPierce
-		or nil
-
-	local terminating =
-		moduleConfig.UseCastTerminating
-		and events.CastTerminating
-		or nil
+	local canPierce = if type(events.CanPierce) == "function" then events.CanPierce else nil
+	local terminating = if type(events.CastTerminating) == "function" then events.CastTerminating else nil
 
 	return canPierce, terminating
 end
@@ -914,12 +1002,13 @@ local function ShouldPierce(
 	velocity: Vector3,
 	canPierce: TypeDef.CanPierceFunction?
 ): boolean
-	if not canPierce then
+	local cast = ActivesRef[id]
+	if not canPierce or not cast then
 		return false
 	end
 
 	return canPierce(
-		ActivesRef[id],
+		cast,
 		result,
 		velocity,
 		casts_RayInfo[id].CosmeticBulletObject
@@ -940,8 +1029,10 @@ local function CastSegment(
 ): (RaycastResult?, boolean, number)
 	table.clear(pierceResults)
 
-	local endpoint = origin + displacement
 	local direction = if displacement.Magnitude > EPSILON then displacement.Unit else Vector3.zero
+	-- Extend the query by a tiny amount so a surface exactly at a segment
+	-- boundary is not missed due to raycast endpoint precision.
+	local endpoint = origin + displacement + direction * RAY_SEARCH_OFFSET
 	local rayOrigin = origin
 	local lastResult: RaycastResult? = nil
 	local rayInfo = casts_RayInfo[id]
@@ -1220,16 +1311,9 @@ local function SimulateCast(
 		unitDirection
 	)
 
-	local eventConfig = casts_FastCastEventsConfig[id]
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
 	local moduleEvents = casts_FastCastEvents[id]
-	if (eventConfig and eventConfig.UseLengthChanged)
-		or (
-			moduleConfig
-			and moduleConfig.UseLengthChanged
-			and moduleEvents
-			and moduleEvents.LengthChanged
-		)
+	if HasCasterEventForCast(id, EVT_LENGTH_CHANGED)
+		or (moduleEvents and type(moduleEvents.LengthChanged) == "function")
 	then
 		QueueEvent(
 			id,
@@ -1244,8 +1328,6 @@ local function SimulateCast(
 
 	casts_DistanceCovered[id] += rayDisplacement
 
-	QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
-
 	if delta > 0 and casts_VisualizeCasts[id] then
 		QueueVisualizeSegment(
 			id,
@@ -1259,6 +1341,8 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if not result then
+		QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
+
 		if casts_DistanceCovered[id] >= casts_MaxDistance[id] then
 			local _, castTerminatingfn = GetEventCallbacks(id)
 			QueueEvent(
@@ -1277,10 +1361,12 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if result.Instance == rayInfo.CosmeticBulletObject then
+		QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 		return false
 	end
 
 	if not didHit then
+		QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 		return false
 	end
 
@@ -1289,10 +1375,11 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if casts_HighFidelityBehavior[id]
-		== FastCastEnums.HighFidelityBehavior.Automatic
+		== HIGH_FIDELITY_BEHAVIOR_AUTOMATIC
 		and casts_HighFidelitySegmentSize[id] > 0
 	then
 		if casts_IsActivelyResimulating[id] then
+			QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 			QueueEvent(
 				id,
 				EVT_CAST_TERMINATING,
@@ -1329,6 +1416,7 @@ local function SimulateCast(
 		return true
 	end
 
+	QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 	QueueHit(
 		id,
 		result,
@@ -1423,11 +1511,7 @@ local function SimulateAlwaysHighFidelity(
 	)
 
 	local canPierce, castTerminatingfn = GetEventCallbacks(id)
-	local eventConfig = casts_FastCastEventsModuleConfig[id]
-	local canPierceEnabled =
-		canPierce ~= nil
-		and eventConfig ~= nil
-		and eventConfig.UseCanPierce == true
+	local canPierceEnabled = canPierce ~= nil
 	local endpoint =
 		resultOfCast
 		and resultOfCast.Position
@@ -1516,10 +1600,7 @@ function ParallelSimulation_Register(cast: any)
 	casts_CancelHighResCast[id] = false
 
 	casts_Trajectory[id] = cast.StateInfo.Trajectory
-
-	casts_FastCastEventsModuleConfig[id] = cast.StateInfo.FastCastEventsModuleConfig
-
-	casts_FastCastEventsConfig[id] = cast.StateInfo.FastCastEventsConfig
+	casts_CasterId[id] = cast.CasterId
 
 	casts_VisualizeCasts[id] = cast.StateInfo.VisualizeCasts
 
@@ -1598,9 +1679,7 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_CancelHighResCast[castID] = nil
 
 	casts_Trajectory[castID] = nil
-
-	casts_FastCastEventsModuleConfig[castID] = nil
-	casts_FastCastEventsConfig[castID] = nil
+	casts_CasterId[castID] = nil
 	casts_FastCastEvents[castID] = nil
 
 	if casts_HasCosmetic[castID] then
@@ -1753,17 +1832,12 @@ local function UpdateCasts(delta: number)
 			trajectory.Acceleration
 		)
 
-		local eventConfig = casts_FastCastEventsConfig[id]
-		local moduleConfig = casts_FastCastEventsModuleConfig[id]
 		local moduleEvents = casts_FastCastEvents[id]
 
 		-- Worker-module OnStep is synchronous and precedes movement so a module
 		-- can modify the active trajectory for this update. Do not queue it for
 		-- post-movement dispatch, which would steer only the next step.
-		if moduleConfig
-			and moduleConfig.UseOnStep
-			and moduleEvents
-			and type(moduleEvents.OnStep) == "function"
+		if moduleEvents and type(moduleEvents.OnStep) == "function"
 		then
 			moduleEvents.OnStep(cast, delta)
 			casts_Trajectory[id] = cast.StateInfo.Trajectory
@@ -1777,7 +1851,7 @@ local function UpdateCasts(delta: number)
 		end
 
 		-- Retain the separate public OnStep notification path, if configured.
-		if eventConfig and eventConfig.UseOnStep then
+		if HasCasterEventForCast(id, EVT_ON_STEP) then
 			QueueEvent(id, EVT_ON_STEP, delta)
 		end
 
@@ -1787,7 +1861,7 @@ local function UpdateCasts(delta: number)
 
 		local behavior = casts_HighFidelityBehavior[id]
 
-		if behavior == FastCastEnums.HighFidelityBehavior.Always then
+		if behavior == HIGH_FIDELITY_BEHAVIOR_ALWAYS then
 			SimulateAlwaysHighFidelity(
 				id,
 				delta
@@ -1807,25 +1881,31 @@ local function UpdateCasts(delta: number)
 		end
 	end
 
-	-- =========================================================================
-	-- Synchronize back to the serial scheduler.
-	-- =========================================================================
-
 	task.synchronize()
 
-	-- =========================================================================
-	-- Main-thread-only work.
-	-- =========================================================================
+	local batch: { any } = {}
+	local batchCount = 0
+
+	batchCount = FireQueuedEvents(EVT_ON_STEP, batch, batchCount)
+
+	FireOutputBatch(batch, batchCount)
 
 	UpdateMotor6Ds()
 	BulkMoveTo()
 
 	FireQueuedVisualizes()
-	FireQueuedEvents()
 
-	-- Reset pool counters (reuse tables next frame)
+	batch = {}
+	batchCount = 0
+
+	batchCount = FireQueuedEvents(EVT_LENGTH_CHANGED, batch, batchCount)
+	batchCount = FireQueuedEvents(EVT_HIT, batch, batchCount)
+	batchCount = FireQueuedEvents(EVT_PIERCED, batch, batchCount)
+	batchCount = FireQueuedEvents(EVT_CAST_TERMINATING, batch, batchCount)
+
+	FireOutputBatch(batch, batchCount)
+
 	ResetPools()
-	queuedEventsCount = 0
 	queuedVisCount = 0
 end
 
@@ -1865,6 +1945,18 @@ function ParallelSimulation.Register(cast: any)
 	ParallelSimulation_Register(cast)
 end
 
+function ParallelSimulation.SetCasterEvents(casterId: number, eventFlags: { [number]: boolean })
+	CasterEventFlags[casterId] = table.clone(eventFlags)
+end
+
+function ParallelSimulation.HasCasterEvent(casterId: number, eventType: number): boolean
+	return HasCasterEvent(casterId, eventType)
+end
+
+function ParallelSimulation.UnregisterCaster(casterId: number)
+	CasterEventFlags[casterId] = nil
+end
+
 function ParallelSimulation.Unregister(castID: number)
 	ParallelSimulation_Unregister(castID)
 end
@@ -1888,8 +1980,6 @@ function ParallelSimulation.SyncCast(
 	casts_UserData[id] = cast.UserData
 	casts_HighFidelitySegmentSize[id] = stateInfo.HighFidelitySegmentSize or 0.1
 	casts_HighFidelityBehavior[id] = stateInfo.HighFidelityBehavior or 0
-	casts_FastCastEventsModuleConfig[id] = stateInfo.FastCastEventsModuleConfig
-	casts_FastCastEventsConfig[id] = stateInfo.FastCastEventsConfig
 	casts_VisualizeCasts[id] = stateInfo.VisualizeCasts
 	casts_VisualizeCastSettings[id] = stateInfo.VisualizeCastSettings
 	casts_RayInfo[id] = rayInfo

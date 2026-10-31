@@ -9,9 +9,10 @@
 -- Requires
 
 local TypeDefinitions = require(script.Parent.TypeDefinitions)
-local FastCastEnums = require(script.Parent:WaitForChild("FastCastEnums"))
 
 -- Defaults
+
+local HIGH_FIDELITY_BEHAVIOR_DEFAULT = 1
 
 local Defaults = {}
 
@@ -26,7 +27,7 @@ Defaults.FastCastBehavior = {
 	MaxDistance = 1000,
 	MaxPiercesPerStep = 1,
 	MaxLifetime = nil,
-	HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Default,
+	HighFidelityBehavior = HIGH_FIDELITY_BEHAVIOR_DEFAULT,
 	HighFidelitySegmentSize = 0.5,
 
 	CosmeticBulletTemplate = nil,
@@ -57,26 +58,8 @@ Defaults.FastCastBehavior = {
 		Debug_HitLifetime = 1
 	},
 
-	FastCastEventsModuleConfig = {
-		UseLengthChanged = false,
-		UseHit = true,
-		UsePierced = true,
-		UseCastTerminating = true,
-		UseCanPierce = true,
-		UseCastFire = true,
-		UseOnStep = false
-	},
-
 	CloneTemplate = true,
 
-	FastCastEventsConfig = {
-		UseLengthChanged = false,
-		UseHit = true,
-		UsePierced = true,
-		UseCastTerminating = true,
-		UseCanPierce = true,
-		UseCastFire = true
-	}
 } :: TypeDefinitions.FastCastBehavior
 
 return Defaults

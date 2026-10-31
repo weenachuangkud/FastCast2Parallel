@@ -184,8 +184,6 @@ function Benchmarks.run(overrides: any?): { any }
 	behavior.MaxDistance = 1e9
 	behavior.Acceleration = Vector3.zero
 	behavior.AutoIgnoreContainer = true
-	behavior.FastCastEventsConfig.UseCastFire = true
-	behavior.FastCastEventsConfig.UseCastTerminating = true
 	config.behavior = behavior
 
 	local results = {}

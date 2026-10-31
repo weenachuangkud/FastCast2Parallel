@@ -27,6 +27,8 @@ export type Signal<T...> = {
 	Once: (self: Signal<T...>, callback: (T...) -> ()) -> Connection,
 	Wait: (self: Signal<T...>) -> T...,
 	Fire: (self: Signal<T...>, T...) -> (),
+	HasListeners: (self: Signal<T...>) -> boolean,
+	SetListenerFlagChanged: (self: Signal<T...>, callback: ((boolean) -> ())?) -> (),
 	DisconnectAll: (self: Signal<T...>) -> (),
 	Destroy: (self: Signal<T...>) -> (),
 }
@@ -36,6 +38,13 @@ export type Signal<T...> = {
 local Connection = {}
 Connection.__index = Connection
 Connection.__type = "Connection"
+
+local function notifyListenerChanged(signal)
+	local callback = signal._listenerChangedCallback
+	if callback then
+		callback(signal._listenerCount > 0)
+	end
+end
 
 local function disconnect(self)
 	if not self.Connected then
@@ -61,6 +70,11 @@ local function disconnect(self)
 	if next then
 		next._prev = prev
 	end
+
+	signal._listenerCount -= 1
+	if signal._listenerCount == 0 then
+		notifyListenerChanged(signal)
+	end
 end
 
 local function reconnect(self)
@@ -73,7 +87,9 @@ local function reconnect(self)
 		return
 	end
 
+	local wasEmpty = signal._listenerCount == 0
 	self.Connected = true
+	signal._listenerCount += 1
 
 	local head = signal._head
 	self._next = head
@@ -84,6 +100,10 @@ local function reconnect(self)
 	end
 
 	signal._head = self
+
+	if wasEmpty then
+		notifyListenerChanged(signal)
+	end
 end
 
 Connection.Disconnect = disconnect
@@ -96,7 +116,24 @@ Signal.__index = Signal
 Signal.__type = "Signal"
 
 function Signal.new()
-	return setmetatable({ _head = nil, _destroyed = false }, Signal)
+	return setmetatable({
+		_head = nil,
+		_listenerCount = 0,
+		_listenerChangedCallback = nil,
+		_destroyed = false,
+	}, Signal)
+end
+
+function Signal:HasListeners(): boolean
+	return self._listenerCount > 0
+end
+
+function Signal:SetListenerFlagChanged(callback)
+	assert(callback == nil or type(callback) == "function", "Signal callback must be a function")
+	self._listenerChangedCallback = callback
+	if callback then
+		callback(self._listenerCount > 0)
+	end
 end
 
 function Signal.is(value: any): boolean
@@ -106,6 +143,7 @@ end
 function Signal:Connect(callback)
 	assert(type(callback) == "function", "Signal:Connect expects a function")
 
+	local wasEmpty = self._listenerCount == 0
 	local connection = setmetatable({
 		Connected = true,
 		_signal = self,
@@ -119,6 +157,10 @@ function Signal:Connect(callback)
 		head._prev = connection
 	end
 	self._head = connection
+	self._listenerCount += 1
+	if wasEmpty then
+		notifyListenerChanged(self)
+	end
 
 	return connection
 end

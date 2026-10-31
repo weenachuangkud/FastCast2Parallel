@@ -6,13 +6,19 @@
 
 local FastCast2 = script.Parent
 
-local FastCastEnums = require(FastCast2:WaitForChild("FastCastEnums"))
 local ActiveCast = require(FastCast2:WaitForChild("ActiveCast"))
 local TypeDef = require(FastCast2:WaitForChild("TypeDefinitions"))
 local ParallelSimulation = require(FastCast2:WaitForChild("ParallelSimulation"))
 local Motor6DCache = require(FastCast2:WaitForChild("Motor6DCache"))
 
-local EnumCastTypes = FastCastEnums.CastType
+local CAST_TYPE_RAYCAST = 1
+local CAST_TYPE_BLOCKCAST = 2
+local CAST_TYPE_SPHERECAST = 3
+
+-- Event type constants (keep these IDs in sync with ParallelSimulation).
+local EVT_CAST_TERMINATING = 4
+local EVT_CAST_FIRE = 6
+local EVT_CASTER_DESTROYED = 8
 
 local BaseCast = {}
 BaseCast.__index = BaseCast
@@ -33,23 +39,24 @@ local function SendCastFire(
 	velocity: Vector3 | number,
 	behavior: TypeDef.FastCastBehavior
 )
-	(cast.Caster :: any).Output:Fire("CastFire", cast, origin, direction, velocity, behavior)
+	(cast.Caster :: any).Output:Fire(EVT_CAST_FIRE, cast, origin, direction, velocity, behavior)
 end
 
 local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastTerminatingFunction?)
 	if cast._Destroying then return end
 	cast._Destroying = true
 
-	local FastCastEventsConfig = cast.StateInfo.FastCastEventsConfig
-	if FastCastEventsConfig and FastCastEventsConfig.UseCastTerminating then
-		cast.Caster.Output:Fire("CastTerminating", cast)
+	if ParallelSimulation.HasCasterEvent(cast.CasterId, EVT_CAST_TERMINATING) then
+		cast.Caster.Output:Fire(EVT_CAST_TERMINATING, cast)
 	end
 
 	if castTerminatingFunction then
 		castTerminatingFunction((cast :: any))
 	end
-	
-	table.clear(cast :: any)
+
+	-- Output:Fire dispatches listeners asynchronously. Keep the cast intact
+	-- until those listeners finish; it becomes collectible after their
+	-- references are released and the worker unregisters it.
 end
 
 -- Only fields listed here are copied from the source cast to the worker cast.
@@ -63,6 +70,7 @@ local MutableCastFields = {
 		-- Pause state is intentionally excluded from snapshots; it is applied
 		-- through the dedicated SetCastPaused Actor message.
 		MaxLifetime = true,
+		MaxPiercesPerStep = true,
 		HighFidelitySegmentSize = true,
 		HighFidelityBehavior = true,
 		VisualizeCasts = true,
@@ -73,25 +81,6 @@ local MutableCastFields = {
 			Origin = true,
 			InitialVelocity = true,
 			Acceleration = true,
-		},
-
-		FastCastEventsConfig = {
-			UseLengthChanged = true,
-			UseHit = true,
-			UsePierced = true,
-			UseCastTerminating = true,
-			UseCanPierce = true,
-			UseCastFire = true,
-		},
-
-		FastCastEventsModuleConfig = {
-			UseLengthChanged = true,
-			UseHit = true,
-			UsePierced = true,
-			UseCastTerminating = true,
-			UseCanPierce = true,
-			UseCastFire = true,
-			UseOnStep = true,
 		},
 
 		VisualizeCastSettings = {
@@ -152,6 +141,10 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 			self.Actives[activeCastID] = nil
 			ParallelSimulation.Unregister(activeCastID)
 		end
+	end)
+
+	Actor:BindToMessage("SetCasterEvents", function(casterId: number, eventFlags: { [number]: boolean })
+		ParallelSimulation.SetCasterEvents(casterId, eventFlags)
 	end)
 
 	SyncChanges = Instance.new("BindableEvent")
@@ -239,18 +232,15 @@ function BaseCast:Raycast(casterId: number, Origin: Vector3, Direction: Vector3,
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
-		CastType = EnumCastTypes.Raycast
+		CastType = CAST_TYPE_RAYCAST
 	} :: any, true)
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if Behavior.FastCastEventsConfig.UseCastFire then
+	if ParallelSimulation.HasCasterEvent(casterId, EVT_CAST_FIRE) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig
-		and Behavior.FastCastEventsModuleConfig.UseCastFire
-		and eventModule
-	then
+	if eventModule then
 		local moduleEvents = require(eventModule)
 		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
 		if type(castFire) == "function" then
@@ -267,19 +257,16 @@ function BaseCast:Blockcast(casterId: number, Origin: Vector3, Size: Vector3, Di
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
-		CastType = EnumCastTypes.Blockcast,
+		CastType = CAST_TYPE_BLOCKCAST,
 		Size = Size
 	} :: any, true)
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if Behavior.FastCastEventsConfig.UseCastFire then
+	if ParallelSimulation.HasCasterEvent(casterId, EVT_CAST_FIRE) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig
-		and Behavior.FastCastEventsModuleConfig.UseCastFire
-		and eventModule
-	then
+	if eventModule then
 		local moduleEvents = require(eventModule)
 		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
 		if type(castFire) == "function" then
@@ -296,19 +283,16 @@ function BaseCast:Spherecast(casterId: number, Origin: Vector3, Radius: number, 
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
-		CastType = EnumCastTypes.Spherecast,
+		CastType = CAST_TYPE_SPHERECAST,
 		Radius = Radius
 	} :: any, true)
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
-	if Behavior.FastCastEventsConfig.UseCastFire then
+	if ParallelSimulation.HasCasterEvent(casterId, EVT_CAST_FIRE) then
 		SendCastFire(cast, Origin, Direction, Velocity, Behavior)
 	end
-	if Behavior.FastCastEventsModuleConfig
-		and Behavior.FastCastEventsModuleConfig.UseCastFire
-		and eventModule
-	then
+	if eventModule then
 		local moduleEvents = require(eventModule)
 		local castFire = type(moduleEvents) == "table" and moduleEvents.CastFire or nil
 		if type(castFire) == "function" then
@@ -352,7 +336,8 @@ function BaseCast:DestroyCaster(casterId: number)
 		end
 	end
 
-	Output:Fire("CasterDestroyed", casterId)
+	ParallelSimulation.UnregisterCaster(casterId)
+	Output:Fire(EVT_CASTER_DESTROYED, casterId)
 end
 
 function BaseCast:Destroy()
