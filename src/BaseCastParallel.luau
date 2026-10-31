@@ -53,8 +53,10 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 	if castTerminatingFunction then
 		castTerminatingFunction((cast :: any))
 	end
-	
-	table.clear(cast :: any)
+
+	-- Output:Fire dispatches listeners asynchronously. Keep the cast intact
+	-- until those listeners finish; it becomes collectible after their
+	-- references are released and the worker unregisters it.
 end
 
 -- Only fields listed here are copied from the source cast to the worker cast.
