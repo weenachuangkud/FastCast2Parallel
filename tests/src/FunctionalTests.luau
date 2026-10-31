@@ -501,7 +501,10 @@ return function()
 				local caster = createParallelCaster(nil, expect)
 				caster:SetFastCastEventsModule(TestEventsModule)
 				task.wait(0.25)
-				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 1200, behavior)
+
+				-- Keep all three walls inside one simulation step. Event priority
+				-- is guaranteed within a step, not across separate frames.
+				fire(caster, "Raycast", Vector3.zero, Vector3.new(0, 0, -1), 6000, behavior)
 
 				expect.truthy(
 					Framework.waitFor(function()
