@@ -15,7 +15,12 @@ local FastCastEnums = require(FastCastModule:WaitForChild("FastCastEnums"))
 local Config = require(FastCastModule:WaitForChild("Config"))
 
 local DebugLogging = Config.DebugLogging
-local EnumCastTypes = FastCastEnums.CastType
+
+local CastType = {
+	Raycast = 1,
+	Blockcast = 2,
+	Spherecast = 3
+}
 
 local DEFAULT_MAX_DISTANCE = 1000
 local FC_VIS_OBJ_NAME = "FastCastVisualizationObjects"
@@ -211,7 +216,7 @@ end
 -- ============================================================================
 
 local castHandlers = {
-	[EnumCastTypes.Raycast] = function(
+	[CastType.Raycast] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -220,7 +225,7 @@ local castHandlers = {
 		return worldRoot:Raycast(origin, direction, params)
 	end,
 
-	[EnumCastTypes.Blockcast] = function(
+	[CastType.Blockcast] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -235,7 +240,7 @@ local castHandlers = {
 		)
 	end,
 
-	[EnumCastTypes.Spherecast] = function(
+	[CastType.Spherecast] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -361,9 +366,9 @@ local function DbgVisualizeHit(
 end
 
 local Visualizers = {
-	[EnumCastTypes.Raycast] = DbgVisualizeRaySegment,
-	[EnumCastTypes.Blockcast] = DbgVisualizeBlockSegment,
-	[EnumCastTypes.Spherecast] = DbgVisualizeSphereSegment
+	[CastType.Raycast] = DbgVisualizeRaySegment,
+	[CastType.Blockcast] = DbgVisualizeBlockSegment,
+	[CastType.Spherecast] = DbgVisualizeSphereSegment
 }
 
 -- ============================================================================
@@ -537,9 +542,9 @@ local function FireQueuedVisualizes()
 		end
 
 		-- Reuse single variant table (consumed synchronously)
-		if castType == EnumCastTypes.Raycast then
+		if castType == CastType.Raycast then
 			reusableVariant.castLength = casts_RayDisplacement[castID] or 1
-		elseif castType == EnumCastTypes.Blockcast then
+		elseif castType == CastType.Blockcast then
 			reusableVariant.size = (casts_CastVariant[castID] :: BlockcastVariant).Size
 		else
 			reusableVariant.radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
