@@ -11,7 +11,6 @@ local RS = game:GetService("RunService")
 local FastCastModule = script.Parent
 
 local TypeDef = require(FastCastModule:WaitForChild("TypeDefinitions"))
-local FastCastEnums = require(FastCastModule:WaitForChild("FastCastEnums"))
 local Config = require(FastCastModule:WaitForChild("Config"))
 
 local DebugLogging = Config.DebugLogging
@@ -19,6 +18,9 @@ local DebugLogging = Config.DebugLogging
 local CAST_TYPE_RAYCAST = 1
 local CAST_TYPE_BLOCKCAST = 2
 local CAST_TYPE_SPHERECAST = 3
+
+local HIGH_FIDELITY_BEHAVIOR_AUTOMATIC = 2
+local HIGH_FIDELITY_BEHAVIOR_ALWAYS = 3
 
 local DEFAULT_MAX_DISTANCE = 1000
 local FC_VIS_OBJ_NAME = "FastCastVisualizationObjects"
@@ -1373,7 +1375,7 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if casts_HighFidelityBehavior[id]
-		== FastCastEnums.HighFidelityBehavior.Automatic
+		== HIGH_FIDELITY_BEHAVIOR_AUTOMATIC
 		and casts_HighFidelitySegmentSize[id] > 0
 	then
 		if casts_IsActivelyResimulating[id] then
@@ -1859,7 +1861,7 @@ local function UpdateCasts(delta: number)
 
 		local behavior = casts_HighFidelityBehavior[id]
 
-		if behavior == FastCastEnums.HighFidelityBehavior.Always then
+		if behavior == HIGH_FIDELITY_BEHAVIOR_ALWAYS then
 			SimulateAlwaysHighFidelity(
 				id,
 				delta
