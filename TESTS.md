@@ -14,38 +14,41 @@ The runner builds a Rojo place, runs it in Roblox Studio through `run-in-roblox`
 
 ## Functional test sections
 
-The functional suite is organized into two sections. Both exercise the **Parallel implementation**; the shared API section is based on the Serial test coverage and adapted for Parallel's worker-based execution model.
+The functional suite is organized into shared API coverage and Parallel-specific coverage. Shared API tests are adapted to the Parallel execution model; they check the same public behavior as the Serial suite where the API contracts match. Parallel-only differences (such as asynchronous cast dispatch and worker synchronization) are tested separately.
 
-### API coverage
+### Shared API coverage
 
 - [ ] Initialize, create, and destroy casters.
 - [ ] Stop simulation updates with an active cast, then call `FastCast.Init()` and confirm the cast resumes.
-- [ ] Call `FastCast.DestroyVMs()`, verify firing requires reinitialization, then call `FastCast.Init()` and confirm an existing caster can fire again.
 - [ ] Fire Raycast, Blockcast, and Spherecast casts; confirm each reaches a target and terminates.
-- [ ] Verify enabled public event callbacks and multiple Signal listeners.
-- [ ] Verify caster Signal listeners are tracked per caster and synchronized to every worker when connected, disconnected, or reconnected.
-- [ ] Verify worker module callbacks are detected by checking whether each event field is a function.
-- [ ] Check behavior defaults and independent nested configuration.
-- [ ] Verify `InitialOffset` initializes the cosmetic transform and that runtime `Offset` changes propagate through `SyncChangesToCast`.
-- [ ] Verify `MaxPiercesPerStep` emits pierced events before the terminal hit and respects the configured ray-attempt limit.
-- [ ] Switch movement mode and manipulate active cast position, velocity, and acceleration.
-- [ ] Verify `RaycastParams` filtering and `MaxDistance` termination without a hit.
-- [ ] Verify cosmetic template cloning, `CloneTemplate = false`, and ignoring the cosmetic container.
-- [ ] Exercise high-fidelity hit resolution and maximum-distance termination.
-- [ ] Verify `MaxLifetime`, including zero lifetime, and pause/resume behavior.
+- [ ] Verify enabled public event callbacks, including `CastFire`, `OnStep`, `LengthChanged`, `Hit`, `Pierced`, and `CastTerminating`.
+- [ ] Verify Signals support multiple listeners, `Once`, `Wait`, `Disconnect`, `DisconnectAll`, and `HasListeners`.
+- [ ] Verify `CanPierce` and `Pierced` when a cast passes through an instance and reaches the next target.
+- [ ] Verify `OnStep` can change the trajectory for subsequent movement.
+- [ ] Check `FastCast.newBehavior()` defaults and independent nested configuration.
+- [ ] Switch movement mode and manipulate cast position, velocity, and acceleration.
+- [ ] Confirm trajectory setters preserve current position and runtime.
+- [ ] Confirm `PreviousPosition` advances with the simulated cast.
+- [ ] Confirm `RaycastParams` filtering and `MaxDistance` termination without a hit.
+- [ ] Confirm `MaxLifetime` termination, including zero lifetime.
+- [ ] Confirm paused casts freeze runtime and resume without catching up.
+- [ ] Exercise `Default`, `Automatic`, and `Always` high-fidelity modes.
+- [ ] Confirm cosmetic template cloning, `CloneTemplate = false`, `InitialOffset`, runtime `Offset`, and ignoring the cosmetic container.
+- [ ] Confirm terminating a cast from `OnStep`, `LengthChanged`, or `Pierced` preserves the termination event.
 
 ### Parallel-specific coverage
 
-- [ ] Confirm the shared runtime initializes and creates casters with distinct `CasterId` values.
-- [ ] Confirm events are routed to the correct caster when multiple casters share the runtime.
-- [ ] Confirm a caster can fire again after an earlier cast terminates, including multiple requests close together.
-- [ ] Confirm worker `OnStep` runs before movement and can steer a cast.
-- [ ] Confirm `FastCast:SyncChangesToCast(cast)` propagates updated `UserData` to worker `OnStep`.
-- [ ] Confirm `FastCast:SyncChangesToCast(cast)` preserves worker-owned runtime and trajectory references, refreshes cached `MaxDistance`, and applies cast changes.
-- [ ] Confirm `SetFastCastEventsModule` forwards module events to the configured module.
-- [ ] Check Parallel-specific pause/resume and worker simulation behavior.
+- [ ] Confirm worker runtime initialization and distinct `CasterId` values.
+- [ ] Confirm events are routed to the correct caster when multiple casters share the worker pool.
+- [ ] Confirm a caster can fire again after a cast terminates, including multiple requests close together.
+- [ ] Confirm worker `OnStep` runs before movement and can steer the current simulation step.
+- [ ] Confirm caster Signal listener changes are synchronized to workers after connect, disconnect, and reconnect.
+- [ ] Confirm `SetFastCastEventsModule` forwards module events.
+- [ ] Confirm `FastCast:SyncChangesToCast(cast)` propagates updated `UserData`, applies cast changes, refreshes cached `MaxDistance`, and preserves worker-owned runtime and trajectory references.
+- [ ] Confirm `PauseCast` / `ResumeCast` affect the worker simulation.
+- [ ] Confirm `DestroyVMs()` tears down workers and `Init()` recreates the runtime so existing casters can fire again.
 
-These lists describe the intended coverage, not a guarantee that every item has passed in the current environment. Run the suite in Studio to verify changes.
+The parallel API queues fire requests for worker dispatch, so it does not promise the synchronous cast return value tested by Serial `RaycastFire`. Cast data is observed through the `CastFire` Signal instead. Run the suite in Studio to verify runtime behavior; this checklist describes intended coverage, not a claim that tests have passed in the current environment.
 
 ## Benchmarks
 
