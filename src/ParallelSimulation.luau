@@ -1300,8 +1300,6 @@ local function SimulateCast(
 
 	casts_DistanceCovered[id] += rayDisplacement
 
-	QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
-
 	if delta > 0 and casts_VisualizeCasts[id] then
 		QueueVisualizeSegment(
 			id,
@@ -1315,6 +1313,8 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if not result then
+		QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
+
 		if casts_DistanceCovered[id] >= casts_MaxDistance[id] then
 			local _, castTerminatingfn = GetEventCallbacks(id)
 			QueueEvent(
@@ -1333,10 +1333,12 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if result.Instance == rayInfo.CosmeticBulletObject then
+		QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 		return false
 	end
 
 	if not didHit then
+		QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 		return false
 	end
 
@@ -1349,6 +1351,7 @@ local function SimulateCast(
 		and casts_HighFidelitySegmentSize[id] > 0
 	then
 		if casts_IsActivelyResimulating[id] then
+			QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 			QueueEvent(
 				id,
 				EVT_CAST_TERMINATING,
@@ -1385,6 +1388,7 @@ local function SimulateCast(
 		return true
 	end
 
+	QueueSegmentPierces(id, casts_StepPierceResults[id], velocity, false)
 	QueueHit(
 		id,
 		result,
