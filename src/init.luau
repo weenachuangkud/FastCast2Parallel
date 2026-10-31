@@ -110,7 +110,17 @@ type vaildcast = TypeDef.ActiveCastData | TypeDef.ActiveBlockcastData | TypeDef.
 -- CONSTANTS
 local DEFAULT_CACHE_SIZE = 500
 local DEFAULT_CACHE_HOLDER = workspace
-local EventType = FastCastEnums.EventType
+
+local EventType = {
+	LengthChanged = 1,
+	Hit = 2,
+	Pierced = 3,
+	CastTerminating = 4,
+	OnStep = 5,
+	CastFire = 6,
+	Batch = 7,
+	CasterDestroyed = 8
+}
 
 -- Events exposed on a Caster as a Signal. Assigning a function to one of these
 -- names is equivalent to connecting that function to the underlying Signal.
