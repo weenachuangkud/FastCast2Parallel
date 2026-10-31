@@ -776,6 +776,16 @@ function FastCast.DestroyVMs()
 		FinalizeDestroyedCaster(casterId)
 	end
 
+	-- Debug adornments are parented outside the worker Actors, so destroying
+	-- the dispatcher does not remove them. Clear the library-owned visualization
+	-- folder after every worker has finished shutting down.
+	local visualizationFolder = workspace.Terrain:FindFirstChild(
+		DefaultConfigs.VisualizationFolderName
+	)
+	if visualizationFolder then
+		visualizationFolder:Destroy()
+	end
+
 	RuntimeMovementMode = "BulkMoveTo"
 	RuntimeDestroying = false
 
