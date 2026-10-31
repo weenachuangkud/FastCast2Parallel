@@ -60,10 +60,6 @@ local BENCHMARK_COOLDOWN = 2.5
 local FastCastModule = ReplicatedStorage:WaitForChild("FastCast2")
 
 local FastCast = require(FastCastModule)
-local FastCastEnums = require(
-	FastCastModule:WaitForChild("FastCastEnums")
-)
-
 local BenchmarkPackets = require(
 	ReplicatedStorage:WaitForChild("BenchmarkPackets")
 )
@@ -101,7 +97,7 @@ CastBehavior.MaxDistance = 1e9
 CastBehavior.RaycastParams = CastParams
 
 CastBehavior.HighFidelityBehavior =
-	FastCastEnums.HighFidelityBehavior.Default
+	FastCast.HighFidelityBehavior.Default
 
 CastBehavior.HighFidelitySegmentSize = 1
 CastBehavior.Acceleration = Vector3.zero
@@ -137,9 +133,9 @@ end)
 local function getHighFidelityName()
 	local behavior = CastBehavior.HighFidelityBehavior
 
-	if behavior == FastCastEnums.HighFidelityBehavior.Default then
+	if behavior == FastCast.HighFidelityBehavior.Default then
 		return "Default"
-	elseif behavior == FastCastEnums.HighFidelityBehavior.Automatic then
+	elseif behavior == FastCast.HighFidelityBehavior.Automatic then
 		return "Automatic"
 	else
 		return "Always"
@@ -515,20 +511,20 @@ end
 local function cycleHighFidelity()
 	local current = CastBehavior.HighFidelityBehavior
 
-	if current == FastCastEnums.HighFidelityBehavior.Default then
+	if current == FastCast.HighFidelityBehavior.Default then
 
 		CastBehavior.HighFidelityBehavior =
-			FastCastEnums.HighFidelityBehavior.Automatic
+			FastCast.HighFidelityBehavior.Automatic
 
-	elseif current == FastCastEnums.HighFidelityBehavior.Automatic then
+	elseif current == FastCast.HighFidelityBehavior.Automatic then
 
 		CastBehavior.HighFidelityBehavior =
-			FastCastEnums.HighFidelityBehavior.Always
+			FastCast.HighFidelityBehavior.Always
 
 	else
 
 		CastBehavior.HighFidelityBehavior =
-			FastCastEnums.HighFidelityBehavior.Default
+			FastCast.HighFidelityBehavior.Default
 
 	end
 
