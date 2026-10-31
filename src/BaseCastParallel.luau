@@ -6,13 +6,14 @@
 
 local FastCast2 = script.Parent
 
-local FastCastEnums = require(FastCast2:WaitForChild("FastCastEnums"))
 local ActiveCast = require(FastCast2:WaitForChild("ActiveCast"))
 local TypeDef = require(FastCast2:WaitForChild("TypeDefinitions"))
 local ParallelSimulation = require(FastCast2:WaitForChild("ParallelSimulation"))
 local Motor6DCache = require(FastCast2:WaitForChild("Motor6DCache"))
 
-local EnumCastTypes = FastCastEnums.CastType
+local CAST_TYPE_RAYCAST = 1
+local CAST_TYPE_BLOCKCAST = 2
+local CAST_TYPE_SPHERECAST = 3
 
 -- Event type constants (keep these IDs in sync with ParallelSimulation).
 local EVT_CAST_TERMINATING = 4
@@ -228,7 +229,7 @@ function BaseCast:Raycast(casterId: number, Origin: Vector3, Direction: Vector3,
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
-		CastType = EnumCastTypes.Raycast
+		CastType = CAST_TYPE_RAYCAST
 	} :: any, true)
 	cast.CasterId = casterId
 	ParallelSimulation.Register(cast)
@@ -253,7 +254,7 @@ function BaseCast:Blockcast(casterId: number, Origin: Vector3, Size: Vector3, Di
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
-		CastType = EnumCastTypes.Blockcast,
+		CastType = CAST_TYPE_BLOCKCAST,
 		Size = Size
 	} :: any, true)
 	cast.CasterId = casterId
@@ -279,7 +280,7 @@ function BaseCast:Spherecast(casterId: number, Origin: Vector3, Radius: number, 
 		SyncChange = SyncChanges,
 		CacheHolder = self.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, eventModule, {
-		CastType = EnumCastTypes.Spherecast,
+		CastType = CAST_TYPE_SPHERECAST,
 		Radius = Radius
 	} :: any, true)
 	cast.CasterId = casterId
