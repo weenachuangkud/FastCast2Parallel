@@ -68,6 +68,7 @@ local MutableCastFields = {
 		-- Pause state is intentionally excluded from snapshots; it is applied
 		-- through the dedicated SetCastPaused Actor message.
 		MaxLifetime = true,
+		MaxPiercesPerStep = true,
 		HighFidelitySegmentSize = true,
 		HighFidelityBehavior = true,
 		VisualizeCasts = true,
