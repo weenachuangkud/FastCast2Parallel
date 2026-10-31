@@ -44,7 +44,9 @@ The functional suite is organized into shared API coverage and Parallel-specific
 - [ ] Confirm worker `OnStep` runs before movement and can steer the current simulation step.
 - [ ] Confirm caster Signal listener changes are synchronized to workers after connect, disconnect, and reconnect.
 - [ ] Confirm `SetFastCastEventsModule` forwards module events.
-- [ ] Confirm `FastCast:SyncChangesToCast(cast)` propagates updated `UserData`, applies cast changes, refreshes cached `MaxDistance`, and preserves worker-owned runtime and trajectory references.
+- [ ] Confirm worker event batches preserve each cast's arguments when multiple casts dispatch together.
+- [ ] Confirm destroying a caster preserves valid cast data for `CastTerminating` listeners.
+- [ ] Confirm `FastCast:SyncChangesToCast(cast)` propagates updated `UserData`, `MaxPiercesPerStep`, and other mutable fields, refreshes cached `MaxDistance`, and preserves worker-owned runtime and trajectory references.
 - [ ] Confirm `PauseCast` / `ResumeCast` affect the worker simulation.
 - [ ] Confirm `DestroyVMs()` tears down workers and `Init()` recreates the runtime so existing casters can fire again.
 
