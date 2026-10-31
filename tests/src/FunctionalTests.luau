@@ -10,7 +10,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local FastCast = require(ReplicatedStorage:WaitForChild("FastCast2"))
-local FastCastEnums = require(ReplicatedStorage.FastCast2:WaitForChild("FastCastEnums"))
 
 local Framework = require(script.Parent.Framework)
 local TestEventsModule = script.Parent:WaitForChild("TestEventsModule")
@@ -152,7 +151,7 @@ local function registerParallelCastTypes(test: (string, any) -> ())
 				local wall = createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelityBehavior = FastCast.HighFidelityBehavior.Always
 				behavior.HighFidelitySegmentSize = 1
 
 				local directResult = nil
@@ -238,7 +237,7 @@ return function()
 				expect.near(behavior.Acceleration, Vector3.zero, 1e-6, "Acceleration default changed")
 				expect.equal(
 					behavior.HighFidelityBehavior,
-					FastCastEnums.HighFidelityBehavior.Default,
+					FastCast.HighFidelityBehavior.Default,
 					"HighFidelityBehavior default changed"
 				)
 				expect.equal(behavior.HighFidelitySegmentSize, 0.5, "HighFidelitySegmentSize default changed")
@@ -729,9 +728,9 @@ return function()
 
 			test("HighFidelity modes all resolve hits", function(expect)
 				local modes = {
-					{ Name = "Default", Value = FastCastEnums.HighFidelityBehavior.Default, SegmentSize = 0.5 },
-					{ Name = "Automatic", Value = FastCastEnums.HighFidelityBehavior.Automatic, SegmentSize = 0.25 },
-					{ Name = "Always", Value = FastCastEnums.HighFidelityBehavior.Always, SegmentSize = 1 },
+					{ Name = "Default", Value = FastCast.HighFidelityBehavior.Default, SegmentSize = 0.5 },
+					{ Name = "Automatic", Value = FastCast.HighFidelityBehavior.Automatic, SegmentSize = 0.25 },
+					{ Name = "Always", Value = FastCast.HighFidelityBehavior.Always, SegmentSize = 1 },
 				}
 
 				for _, mode in modes do
@@ -781,7 +780,7 @@ return function()
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
 				behavior.MaxDistance = 15
-				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelityBehavior = FastCast.HighFidelityBehavior.Always
 				behavior.HighFidelitySegmentSize = 1
 
 				local hitCount = 0
@@ -1488,7 +1487,7 @@ return function()
 				createWall(arena, Vector3.new(0, 0, -12), Vector3.new(50, 50, 2))
 				local container = createContainer(arena)
 				local behavior = makeBehavior(container)
-				behavior.HighFidelityBehavior = FastCastEnums.HighFidelityBehavior.Always
+				behavior.HighFidelityBehavior = FastCast.HighFidelityBehavior.Always
 				behavior.HighFidelitySegmentSize = 1
 
 				local signal = ReplicatedStorage:WaitForChild("FastCast2TestSignal") :: BindableEvent
