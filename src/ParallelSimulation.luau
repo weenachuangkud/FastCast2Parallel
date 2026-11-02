@@ -11,11 +11,15 @@ local RS = game:GetService("RunService")
 local FastCastModule = script.Parent
 
 local TypeDef = require(FastCastModule:WaitForChild("TypeDefinitions"))
-local FastCastEnums = require(FastCastModule:WaitForChild("FastCastEnums"))
 local Config = require(FastCastModule:WaitForChild("Config"))
 
 local DebugLogging = Config.DebugLogging
-local EnumCastTypes = FastCastEnums.CastType
+local CAST_TYPE_RAYCAST = 1
+local CAST_TYPE_BLOCKCAST = 2
+local CAST_TYPE_SPHERECAST = 3
+
+local HIGH_FIDELITY_BEHAVIOR_AUTOMATIC = 2
+local HIGH_FIDELITY_BEHAVIOR_ALWAYS = 3
 
 local DEFAULT_MAX_DISTANCE = 1000
 local FC_VIS_OBJ_NAME = "FastCastVisualizationObjects"
@@ -173,7 +177,7 @@ end
 -- ============================================================================
 
 local castHandlers = {
-	[EnumCastTypes.Raycast] = function(
+	[CAST_TYPE_RAYCAST] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -182,7 +186,7 @@ local castHandlers = {
 		return worldRoot:Raycast(origin, direction, params)
 	end,
 
-	[EnumCastTypes.Blockcast] = function(
+	[CAST_TYPE_BLOCKCAST] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -197,7 +201,7 @@ local castHandlers = {
 		)
 	end,
 
-	[EnumCastTypes.Spherecast] = function(
+	[CAST_TYPE_SPHERECAST] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
@@ -323,9 +327,9 @@ local function DbgVisualizeHit(
 end
 
 local Visualizers = {
-	[EnumCastTypes.Raycast] = DbgVisualizeRaySegment,
-	[EnumCastTypes.Blockcast] = DbgVisualizeBlockSegment,
-	[EnumCastTypes.Spherecast] = DbgVisualizeSphereSegment
+	[CAST_TYPE_RAYCAST] = DbgVisualizeRaySegment,
+	[CAST_TYPE_BLOCKCAST] = DbgVisualizeBlockSegment,
+	[CAST_TYPE_SPHERECAST] = DbgVisualizeSphereSegment
 }
 
 -- ============================================================================
@@ -511,9 +515,9 @@ local function FireQueuedVisualizes()
 		end
 
 		-- Reuse single variant table (consumed synchronously)
-		if castType == EnumCastTypes.Raycast then
+		if castType == CAST_TYPE_RAYCAST then
 			reusableVariant.castLength = casts_RayDisplacement[castID] or 1
-		elseif castType == EnumCastTypes.Blockcast then
+		elseif castType == CAST_TYPE_BLOCKCAST then
 			reusableVariant.size = (casts_CastVariant[castID] :: BlockcastVariant).Size
 		else
 			reusableVariant.radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
@@ -1289,7 +1293,7 @@ local function SimulateCast(
 	-- ------------------------------------------------------------------------
 
 	if casts_HighFidelityBehavior[id]
-		== FastCastEnums.HighFidelityBehavior.Automatic
+		== HIGH_FIDELITY_BEHAVIOR_AUTOMATIC
 		and casts_HighFidelitySegmentSize[id] > 0
 	then
 		if casts_IsActivelyResimulating[id] then
@@ -1787,7 +1791,7 @@ local function UpdateCasts(delta: number)
 
 		local behavior = casts_HighFidelityBehavior[id]
 
-		if behavior == FastCastEnums.HighFidelityBehavior.Always then
+		if behavior == HIGH_FIDELITY_BEHAVIOR_ALWAYS then
 			SimulateAlwaysHighFidelity(
 				id,
 				delta
